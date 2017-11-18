@@ -1,0 +1,115 @@
+/* Implementation of the LQR-feedback loop.
+
+   Note: at this time, the feedback gain K is computed from Matlab. If somebody
+   wants to write a solution to the algebraic Riccati equations that compute the
+   optimal feedback gain K, please feel absolutely encouraged to do so in the
+   init function :)
+   
+   -- aj / 17th Nov, 2017.
+*/
+
+#include "lqr_control.h"
+
+#define ROS_NODE_NAME "lqr_control"
+LQRController::LQRController() : nh_()
+{
+  int controller_rate_default = 100;
+  nh_.param( "controller_rate", controller_rate_, controller_rate_default );
+  
+  float mass_default = 0.55;
+  nh_.param( "total_mass", total_mass_, mass_default );
+  
+  /* initialise system params, matrices and controller configuration */
+  initLqrSystem();
+  
+  /* Associate subscriber for the current vehicle state */
+  state_sub_ = nh_.subscribe( "/current_state", 1,
+                              &LQRController::stateCallback, this );
+                              
+  /* Announce publisher for controller output */
+  atti_cmd_pub_ = nh_.advertise <lqr_control::CtrlCommand>
+                    ( "/rpyt_command", 1, true );
+  controller_debug_pub_ = nh_.advertise <lqr_control::ControllerDebug>
+                    ( "controller_debug", 1, true );
+                    
+  /* Timer to run the LQR controller perdiodically */
+  float controller_period = 1.0/controller_rate_;
+  controller_timer_ = nh_.createTimer( ros::Duration(controller_period),
+                                      &LQRController::computeFeedback, this );
+  have_state_update_ = false;                                   
+}
+
+void LQRController::initLqrSystem()
+{
+  /* Implementation in Matlab, the values in lqr_K_ are copy-pasta from there.
+    sys_A_ = [..];  (7x7)
+    sys_B_ = [..];  (7x4)
+  
+    lqr_Q_ = [..];  (7x7)
+    lqr_R_ = [..];  (4x4)
+  */
+  lqr_K_ << 1.118, 0.0, 0.0, 1.4995, 0.0, 0.0, 0.0,
+            0.0, 1.118, 0.0, 0.00, 1.4995, 0.0, 0.0,
+            0.0, 0.0, 3.1623, 0.0, 0.0, 2.5347, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
+}
+
+void LQRController::stateCallback( const state_manager::CurrentState::ConstPtr &msg )
+{
+  /* Parse message to obtain state and reduced state information */
+  std::vector<double> sv(13);
+  for( int i=0; i<13; i++ )
+    sv[i] = msg->state_vector[i];
+  float yaw = sv[8];
+  rot_yaw_ << std::cos(yaw), std::sin(yaw), 0,
+            -std::sin(yaw), std::cos(yaw), 0,
+             0, 0, 1;
+  Eigen::Matrix<double, 13,1 >temp( sv.data() );
+  reduced_state_ << temp.head<6>() , double(yaw);
+  have_state_update_ = true;
+}
+
+void LQRController::computeFeedback( const ros::TimerEvent &event )
+{
+  /* Wait for atleast one update, or architect the code better */
+  if( !have_state_update_ )
+    return;
+    
+  /* Compute control inputs (accelerations, in this case) */
+  Eigen::Matrix<double, 4, 1> control_input = -1 * lqr_K_ * reduced_state_;
+  
+  /* Force saturation on downward acceleration */
+  control_input(2) = std::min( control_input(2), 8.0 );
+  control_input(2) -= 9.81;
+  
+  /* Thrust */
+  double T = total_mass_ * control_input.head<3>().norm();
+  
+  /* Roll, pitch and yaw */
+  Eigen::Matrix<double, 3, 1> Z = rot_yaw_ * control_input.head<3>() * (-total_mass_/T);
+  float roll = std::asin( -Z(1) );
+  float pitch = std::atan( Z(0)/Z(2) );
+  float yaw = control_input(3);
+  
+  /* Publish away! */
+  lqr_control::ControllerDebug debug_msg;
+  debug_msg.header.stamp = ros::Time::now();
+  debug_msg.lqr_u[0] = control_input(0);
+  debug_msg.lqr_u[1] = control_input(1);
+  debug_msg.lqr_u[2] = control_input(2);
+  debug_msg.lqr_u[3] = control_input(3);
+  debug_msg.thrust = T;
+  debug_msg.roll = roll;
+  debug_msg.pitch = pitch;
+  debug_msg.yaw = yaw;
+  controller_debug_pub_.publish( debug_msg ); 
+}
+
+int main( int argc, char** argv )
+{
+  ros::init( argc, argv, ROS_NODE_NAME );
+  LQRController lqr;
+  ros::spin();
+  
+  return 0;
+}
