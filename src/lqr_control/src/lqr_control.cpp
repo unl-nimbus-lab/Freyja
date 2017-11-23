@@ -102,7 +102,15 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   debug_msg.roll = roll;
   debug_msg.pitch = pitch;
   debug_msg.yaw = yaw;
-  controller_debug_pub_.publish( debug_msg ); 
+  controller_debug_pub_.publish( debug_msg );
+  
+  lqr_control::CtrlCommand ctrl_cmd;
+  ctrl_cmd.roll = roll;
+  ctrl_cmd.pitch = pitch;
+  ctrl_cmd.yaw = yaw;
+  ctrl_cmd.thrust = T;
+  ctrl_cmd.ctrl_mode = 0b00001111;
+  atti_cmd_pub_.publish( ctrl_cmd );
 }
 
 int main( int argc, char** argv )
