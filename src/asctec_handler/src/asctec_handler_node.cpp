@@ -24,7 +24,13 @@ AsctecHandler::AsctecHandler( const std::string &p, const int b )
   write_buffer_.clear();
   write_buffer_.resize( PRY_PKT_LEN );
   
-  AjSerialInterface::keep_alive_ = false;                          
+  asctec_pub_ = nh_.advertise <asctec_handler::AsctecData>
+                                          ( "/asctec_onboard_data", 1, true );
+  read_decode_timer_ = nh_.createWallTimer( ros::WallDuration(0.011),
+                            &AsctecHandler::readAndDecodePackets, this );
+  
+  
+  AjSerialInterface::keep_alive_ = true;                          
 }
 
 AsctecHandler::~AsctecHandler()
@@ -126,9 +132,13 @@ void AsctecHandler::turnMotorsOn()
     uint16_t crc = LibNimbusSerial::calcCrc16( write_buffer_, MOTORS_ON_CRC_HIGH );
     LibNimbusSerial::pack16( crc, MOTORS_ON_CRC_LOW, write_buffer_ );
   
-    writeCommandPacket();
+    for( uint8_t times=0; times<10; times++ )
+      writeCommandPacket();
     vehicle_state_ = VEHICLE_MOTORS_ON;
     write_buffer_.clear();
+    
+    /* Write idle packet now */
+    motorsIdle();
   }
 }
 
@@ -151,9 +161,94 @@ void AsctecHandler::turnMotorsOff()
   }
 }
 
+void AsctecHandler::motorsIdle()
+{
+  if( vehicle_state_ >= VEHICLE_MOTORS_ON )
+  {
+    write_buffer_.clear();
+    write_buffer_.resize( MOTORS_IDLE_CMND_LEN );
+    LibNimbusSerial::pack8( MOTORS_IDLE_HEADER_VAL, MOTORS_IDLE_HEADER_IDX, write_buffer_ );
+    
+    uint16_t crc = LibNimbusSerial::calcCrc16( write_buffer_, MOTORS_IDLE_CRC_HIGH );
+    LibNimbusSerial::pack16( crc, MOTORS_IDLE_CRC_LOW, write_buffer_ );
+    writeCommandPacket();
+    vehicle_state_ = VEHICLE_IDLING;
+    write_buffer_.clear();
+  }
+}
+
 void AsctecHandler::sendCtrlCommands()
 {
 
+}
+
+void AsctecHandler::readAndDecodePackets( const ros::WallTimerEvent& event )
+{
+  /* This runs continouosly on a ROS-timer and inspects the data buffer to try
+    and construct a packet out of the front-slice (first PKT_LEN elements). If
+    it isn't able to construct a packet then it has to handle the following 
+    weird cases:
+      1. incorrect header: remove the first element in the buffer
+      2. incorrect crc   : remove the first element in the buffer
+      3. correct packet  : remove the packet
+   */
+   double err_now = (event.current_real - event.current_expected).toSec();
+   double err_btw = (event.current_real - event.last_real).toSec();
+   
+   //ROS_INFO( "Cur expectation diff: %0.4f\tTime since last: %0.4f", err_now, err_btw );
+
+  /* get PKT_LEN elements into a local buffer */
+  std::vector <uint8_t> local_buffer;
+  if( AjSerialInterface::getPossiblePacket( local_buffer, int(PKT_LEN) ) )
+  {
+    /* check if there is a matching header */
+    if( local_buffer.front() == PKT_HEADER_FLAG )
+    {
+      /* aha! A possible packet, my lord! 
+          ..which means it should have a valid checksum, right? */
+      uint16_t calc_crc = LibNimbusSerial::calcCrc16( local_buffer, PKT_CHKSUM_IDX_1 );
+      uint16_t buf_crc = LibNimbusSerial::unpack16( local_buffer, PKT_CHKSUM_IDX_0 );
+
+      if( calc_crc == buf_crc )
+      {
+        /* Awesome, we have a totally valid packet now! Let's decode it! */
+        decodePacket( local_buffer );
+        /* Remove it from the running buffer */
+        removeOnePacketLen( PKT_LEN );
+      }
+      else
+      {
+        /* crc does not match, which means false alarm. Need to remove front. */
+        AjSerialInterface::removeFrontElement();
+      }
+    }
+    else
+    {
+      /* Not a valid header. Remove front element. */
+      removeFrontElement();
+    }
+  }
+}
+void AsctecHandler::decodePacket( const std::vector<uint8_t> &buffer )
+{
+  /* Arrived here because checksum and header matched. Now we need to 
+    sequentially unroll the packet contents and add stuff to the class's local
+    variables. Once packet has been unpacked, call publisher.
+  */
+  vehicle_data_.lat = LibNimbusSerial::unpack32( buffer, PKT_LAT_0_IDX );
+  vehicle_data_.lon = LibNimbusSerial::unpack32( buffer, PKT_LON_0_IDX );
+  vehicle_data_.hgt = LibNimbusSerial::unpack32( buffer, PKT_FUSION_HEIGHT_0_IDX );
+  
+  vehicle_data_.sp_x = LibNimbusSerial::unpack32( buffer, PKT_SPEED_X_0_IDX );
+  vehicle_data_.sp_y = LibNimbusSerial::unpack32( buffer, PKT_SPEED_Y_0_IDX );
+  
+  vehicle_data_.best_sp_x = LibNimbusSerial::unpack16( buffer, PKT_BEST_SPEED_X_0_IDX );
+  vehicle_data_.best_sp_y = LibNimbusSerial::unpack16( buffer, PKT_BEST_SPEED_Y_0_IDX );
+  
+  vehicle_data_.heading_angle = LibNimbusSerial::unpack16( buffer, PKT_HEADING_0_IDX );
+  
+  vehicle_data_.header.stamp = ros::Time::now();
+  asctec_pub_.publish( vehicle_data_ );
 }
 
 volatile bool AsctecHandler::shutdown_requested_ = false;

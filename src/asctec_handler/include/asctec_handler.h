@@ -18,7 +18,7 @@ Screw it, this node handles serial interface as well!
 #include <state_manager/CurrentState.h>
 
 #include <asctec_handler/MotorCommand.h>
-//#include <asctec_handler/AsctecCommand.h>
+#include <asctec_handler/AsctecData.h>
 
 #include "aj_serial_interface.h"
 #include "aj_packet_format.h"
@@ -38,6 +38,7 @@ class AsctecHandler : public AjSerialInterface
   ros::NodeHandle nh_;
   
   int vehicle_state_;
+  asctec_handler::AsctecData vehicle_data_;
   
   public:
     AsctecHandler( const std::string&, const int );
@@ -58,14 +59,17 @@ class AsctecHandler : public AjSerialInterface
     
     void turnMotorsOn();
     void turnMotorsOff();
+    void motorsIdle();
     void sendCtrlCommands();
     
+    /* Publisher for decoded data packets */
+    ros::Publisher asctec_pub_;
     /* Function to decode packets based on the packet structure */
-    // void decodePacket( const std::vector<uint8_t> & );
+    void decodePacket( const std::vector<uint8_t> & );
     
     /* Periodically try to read and call decode function */
-    // ros::WallTimer read_decode_timer_;
-    //void readAndDecodePackets( const ros::WallTimerEvent& );
+    ros::WallTimer read_decode_timer_;
+    void readAndDecodePackets( const ros::WallTimerEvent& );
     
 };
 

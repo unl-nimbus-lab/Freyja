@@ -10,6 +10,8 @@ aj: custom packet for velocity control and logging
 #define MOTORS_OFF_HEADER_VAL (0x7E)
 #define MOTORS_ON_HEADER_VAL (0x7F)
 #define AJ_VELOCITY_HEADER_VAL (0xA7)
+
+#define PKT_HEADER_FLAG (0x7E)
 enum {
   PKT_HEADER_IDX = 0,
   PKT_LAT_3_IDX,
