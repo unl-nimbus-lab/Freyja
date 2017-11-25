@@ -18,7 +18,10 @@
 #include <state_manager/CurrentState.h>
 #include <lqr_control/CtrlCommand.h>
 #include <lqr_control/ControllerDebug.h>
+#include <trajectory_provider/ReferenceState.h>
 #include <eigen3/Eigen/Dense>
+
+typedef trajectory_provider::ReferenceState TrajRef;
 
 
 class LQRController
@@ -26,6 +29,9 @@ class LQRController
   ros::NodeHandle nh_;
   state_manager::CurrentState state_vector_;
   Eigen::Matrix<double, 7, 1> reduced_state_;
+  
+  /* Reference state vector */
+  Eigen::Matrix<double, 7, 1> reference_state_;
   
   /* Rate of execution for LQR's feedback */
   int controller_rate_;
@@ -42,6 +48,7 @@ class LQRController
   Eigen::Matrix<double, 3, 3> rot_yaw_;
   
   bool have_state_update_;
+  bool have_reference_update_;
   
   public:
     LQRController();
@@ -55,4 +62,7 @@ class LQRController
     
     ros::Timer controller_timer_;
     void computeFeedback( const ros::TimerEvent & );
+    
+    ros::Subscriber reference_sub_;
+    void trajectoryReferenceCallback( const TrajRef::ConstPtr & );
 };

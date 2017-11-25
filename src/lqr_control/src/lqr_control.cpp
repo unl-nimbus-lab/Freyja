@@ -22,9 +22,12 @@ LQRController::LQRController() : nh_()
   /* initialise system params, matrices and controller configuration */
   initLqrSystem();
   
-  /* Associate subscriber for the current vehicle state */
+  /* Associate a subscriber for the current vehicle state */
   state_sub_ = nh_.subscribe( "/current_state", 1,
                               &LQRController::stateCallback, this );
+  /* Associate a subscriber for the current reference state */
+  reference_sub_ = nh_.subscribe( "/reference_state", 1, 
+                              &LQRController::trajectoryReferenceCallback, this );
                               
   /* Announce publisher for controller output */
   atti_cmd_pub_ = nh_.advertise <lqr_control::CtrlCommand>
@@ -36,7 +39,8 @@ LQRController::LQRController() : nh_()
   float controller_period = 1.0/controller_rate_;
   controller_timer_ = nh_.createTimer( ros::Duration(controller_period),
                                       &LQRController::computeFeedback, this );
-  have_state_update_ = false;                                   
+  have_state_update_ = false;
+  have_reference_update_ = false;                                   
 }
 
 void LQRController::initLqrSystem()
@@ -57,9 +61,12 @@ void LQRController::initLqrSystem()
 void LQRController::stateCallback( const state_manager::CurrentState::ConstPtr &msg )
 {
   /* Parse message to obtain state and reduced state information */
-  std::vector<double> sv(13);
-  for( int i=0; i<13; i++ )
-    sv[i] = msg->state_vector[i];
+  //std::vector<double> sv(13);
+  //for( int i=0; i<13; i++ )
+  //  sv[i] = msg->state_vector[i];
+  const double *msgptr = msg -> state_vector.data();
+  std::vector<double> sv( msgptr, msgptr+13  );
+
   float yaw = sv[8];
   rot_yaw_ << std::cos(yaw), std::sin(yaw), 0,
             -std::sin(yaw), std::cos(yaw), 0,
@@ -67,6 +74,20 @@ void LQRController::stateCallback( const state_manager::CurrentState::ConstPtr &
   Eigen::Matrix<double, 13,1 >temp( sv.data() );
   reduced_state_ << temp.head<6>() , double(yaw);
   have_state_update_ = true;
+  
+  if( have_reference_update_ )
+    reduced_state_ -= reference_state_;
+}
+
+void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
+{
+  /* Simply copy over the reference state. Note that this might happen quite
+    frequently (I expect a well-written trajectory provider to be using a nearly
+    "continous" time update to the reference state). Any optimizations here are
+    greatly welcome.
+  */
+  reference_state_ << msg->pn, msg->pe, msg->pd, msg->vn, msg->ve, msg->vd, msg->yaw;
+  have_reference_update_ = true;
 }
 
 void LQRController::computeFeedback( const ros::TimerEvent &event )
@@ -91,7 +112,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   float pitch = std::atan( Z(0)/Z(2) );
   float yaw = control_input(3);
   
-  /* Publish away! */
+  /* Debug information */
   lqr_control::ControllerDebug debug_msg;
   debug_msg.header.stamp = ros::Time::now();
   debug_msg.lqr_u[0] = control_input(0);
@@ -104,6 +125,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   debug_msg.yaw = yaw;
   controller_debug_pub_.publish( debug_msg );
   
+  /* Actual commanded input */
   lqr_control::CtrlCommand ctrl_cmd;
   ctrl_cmd.roll = roll;
   ctrl_cmd.pitch = pitch;
