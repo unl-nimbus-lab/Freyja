@@ -132,13 +132,13 @@ void AsctecHandler::turnMotorsOn()
     uint16_t crc = LibNimbusSerial::calcCrc16( write_buffer_, MOTORS_ON_CRC_HIGH );
     LibNimbusSerial::pack16( crc, MOTORS_ON_CRC_LOW, write_buffer_ );
   
-    for( uint8_t times=0; times<10; times++ )
       writeCommandPacket();
     vehicle_state_ = VEHICLE_MOTORS_ON;
     write_buffer_.clear();
     
+    //ros::Duration(0.6).sleep();
     /* Write idle packet now */
-    motorsIdle();
+    //motorsIdle();
   }
 }
 
@@ -158,6 +158,9 @@ void AsctecHandler::turnMotorsOff()
     writeCommandPacket();
     vehicle_state_ = VEHICLE_MOTORS_OFF;
     write_buffer_.clear();
+    
+    //ros::Duration(0.6).sleep();
+    //motorsIdle();
   }
 }
 
