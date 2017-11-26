@@ -71,11 +71,14 @@ void LQRController::stateCallback( const state_manager::CurrentState::ConstPtr &
   rot_yaw_ << std::cos(yaw), std::sin(yaw), 0,
             -std::sin(yaw), std::cos(yaw), 0,
              0, 0, 1;
+             
+  /* reduced state is the first 6 elements, and yaw */
   Eigen::Matrix<double, 13,1 >temp( sv.data() );
   reduced_state_ << temp.head<6>() , double(yaw);
   have_state_update_ = true;
   
-  if( have_reference_update_ )
+  std::unique_lock<std::mutex> rsmtx( reference_state_mutex_, std::defer_lock );
+  if( have_reference_update_ && rsmtx.try_lock() )
     reduced_state_ -= reference_state_;
 }
 
@@ -86,7 +89,10 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
     "continous" time update to the reference state). Any optimizations here are
     greatly welcome.
   */
+  reference_state_mutex_.lock();
   reference_state_ << msg->pn, msg->pe, msg->pd, msg->vn, msg->ve, msg->vd, msg->yaw;
+  reference_state_mutex_.unlock();
+  
   have_reference_update_ = true;
 }
 

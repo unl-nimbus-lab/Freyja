@@ -12,6 +12,7 @@
    
    -- aj / 17th Nov, 2017.
 */
+#include <mutex>
 
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -49,6 +50,8 @@ class LQRController
   
   bool have_state_update_;
   bool have_reference_update_;
+  
+  std::mutex reference_state_mutex_;
   
   public:
     LQRController();
