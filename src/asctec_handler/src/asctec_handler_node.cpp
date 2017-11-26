@@ -105,9 +105,9 @@ void AsctecHandler::rpytCommandCallback( const lqr_control::CtrlCommand::ConstPt
   uint16_t crc = LibNimbusSerial::calcCrc16( write_buffer_, PRY_CRC_HIGH );
   LibNimbusSerial::pack16( crc, PRY_CRC_LOW, write_buffer_ );
   
-  ROS_ASSERT( write_buffer_.size() < PRY_PKT_LEN );
+  //ROS_ASSERT( write_buffer_.size() < PRY_PKT_LEN );
   ROS_WARN( "writing [rpyt]: %d, %d, %d, %d", roll, pitch, yaw, thrust );
-  //writeCommandPacket();
+  writeCommandPacket();
 }
 
 void AsctecHandler::motorHandlerCallback( const asctec_handler::MotorCommand::ConstPtr &msg )
