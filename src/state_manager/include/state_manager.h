@@ -12,7 +12,7 @@
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <state_manager/CurrentState.h>
-
+#include <tf/tf.h>
 #define __USE_VICON 1
 
 typedef geometry_msgs::TransformStamped TFStamped;

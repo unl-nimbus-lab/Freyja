@@ -66,9 +66,13 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   state_vector_[5] = ( z - last_pd_ )/time_since;
   
   /* rpy */
-  state_vector_[6] = 0.0;
-  state_vector_[7] = 0.0;
-  state_vector_[8] = msg -> transform.rotation.z;
+  tf::Quaternion q;
+  tf::quaternionMsgToTF( msg -> transform.rotation, q );
+  double roll, pitch, yaw;
+  tf::Matrix3x3(q).getRPY( roll, pitch, yaw );
+  state_vector_[6] = roll;
+  state_vector_[7] = pitch;
+  state_vector_[8] = -yaw;
   
   /* rpy rates */
   state_vector_[9] = 0.0;
