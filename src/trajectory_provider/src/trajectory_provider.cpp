@@ -19,12 +19,12 @@ TrajRef getCurerntReference( const ros::Time &cur_time )
   TrajRef ref_state;
   
   ref_state.header.stamp = cur_time;
-  ref_state.pn = 0.0;
-  ref_state.pe = 0.0;
+  ref_state.pn = 1.2*std::sin( cur_time.toSec() );
+  ref_state.pe = 1.2*std::cos( cur_time.toSec() );
   ref_state.pd = -1.0;
   
-  ref_state.vn = 0.0;
-  ref_state.ve = 0.0;
+  ref_state.vn = 1.2*std::cos( cur_time.toSec() );
+  ref_state.ve = -1.2*std::sin( cur_time.toSec() );
   ref_state.vd = 0.0;
   
   ref_state.yaw = 0.0;
