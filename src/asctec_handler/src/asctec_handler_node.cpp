@@ -54,7 +54,7 @@ void AsctecHandler::fake_destructor()
 void AsctecHandler::limitLqrCommands( float &r, float &p, float &y, float &t )
 {
   /* Remap thrust so that [+5 .. -5] is  [+1 .. -1] */
-  t = t - 6.0;
+  t = t - 5.5;
   t /= 5.0;
 }
 
@@ -79,7 +79,7 @@ void AsctecHandler::rpytCommandCallback( const lqr_control::CtrlCommand::ConstPt
   float f_yaw = msg -> yaw;
   limitLqrCommands( f_roll, f_pitch, f_yaw, f_thrust );
   
-  ROS_WARN( "floats: %0.3f, %0.3f, %0.3f, %0.3f", f_roll, f_pitch, f_yaw, f_thrust );
+  //ROS_WARN( "floats: %0.3f, %0.3f, %0.3f, %0.3f", f_roll, f_pitch, f_yaw, f_thrust );
   /* Convert to -2048 .. 2048 */
   int16_t pitch = static_cast<int16_t> ( 2048 * f_pitch );
   int16_t roll = static_cast<int16_t> ( 2048 * f_roll );
