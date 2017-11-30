@@ -65,7 +65,7 @@ class AsctecHandler : public AjSerialInterface
     /* Publisher for decoded data packets */
     ros::Publisher asctec_pub_;
     /* Function to decode packets based on the packet structure */
-    void decodePacket( const std::vector<uint8_t> & );
+    void decodePacket( std::vector<uint8_t> & );
     
     /* Periodically try to read and call decode function */
     ros::WallTimer read_decode_timer_;

@@ -235,7 +235,9 @@ void AsctecHandler::readAndDecodePackets( const ros::WallTimerEvent& event )
     }
   }
 }
-void AsctecHandler::decodePacket( const std::vector<uint8_t> &buffer )
+// PKT_TYPE is defined in aj_packet_format.h that is included for this class.
+#if PKT_TYPE == 5
+void AsctecHandler::decodePacket( std::vector<uint8_t> &buffer )
 {
   /* Arrived here because checksum and header matched. Now we need to 
     sequentially unroll the packet contents and add stuff to the class's local
@@ -256,7 +258,35 @@ void AsctecHandler::decodePacket( const std::vector<uint8_t> &buffer )
   vehicle_data_.header.stamp = ros::Time::now();
   asctec_pub_.publish( vehicle_data_ );
 }
-
+#elif PKT_TYPE == 6
+void AsctecHandler::decodePacket( std::vector<uint8_t> &buffer )
+{
+  /* Arrived here because checksum and header matched. Unpack the packet into 
+    respective fields and call publisher.
+    Note: this function overload is for the larger packet.
+  */
+  vehicle_data_.lat = LibNimbusSerial::unpack32( buffer, LAT_0_IDX );
+  vehicle_data_.lon = LibNimbusSerial::unpack32( buffer, LON_0_IDX );
+  vehicle_data_.best_lat = LibNimbusSerial::unpack32( buffer, BEST_LAT_0_IDX );
+  vehicle_data_.best_lon = LibNimbusSerial::unpack32( buffer, BEST_LON_0_IDX );
+  vehicle_data_.hgt = LibNimbusSerial::unpack32( buffer, FUSION_HEIGHT_0_IDX );
+  
+  vehicle_data_.sp_x = LibNimbusSerial::unpack32( buffer, GPSSPEED_X_0_IDX );
+  vehicle_data_.sp_y = LibNimbusSerial::unpack32( buffer, GPSSPEED_Y_0_IDX );
+  vehicle_data_.best_sp_x = LibNimbusSerial::unpack16( buffer, BEST_SPEED_X_0_IDX );
+  vehicle_data_.best_sp_y = LibNimbusSerial::unpack16( buffer, BEST_SPEED_Y_0_IDX );
+  vehicle_data_.best_sp_z = LibNimbusSerial::unpack32( buffer, BEST_SPEED_Z_0_IDX );
+  
+  vehicle_data_.heading_angle = LibNimbusSerial::unpack32( buffer, GPS_HEADING_0_IDX );
+  
+  vehicle_data_.pitch_angle = LibNimbusSerial::unpack32( buffer, ANGLE_PITCH_O_IDX );
+  vehicle_data_.roll_angle = LibNimbusSerial::unpack32( buffer, ANGLE_ROLL_0_IDX );
+  vehicle_data_.yaw_angle = LibNimbusSerial::unpack32( buffer, ANGLE_YAW_0_IDX );
+  
+  vehicle_data_.header.stamp = ros::Time::now();
+  asctec_pub_.publish( vehicle_data_ );
+}
+#endif
 volatile bool AsctecHandler::shutdown_requested_ = false;
 int main( int argc, char** argv )
 {
