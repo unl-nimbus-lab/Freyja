@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   roscpp
   state_manager
+  trajectory_provider
 )
 
 find_package(Eigen3 REQUIRED)

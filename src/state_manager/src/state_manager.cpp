@@ -10,10 +10,12 @@ StateManager::StateManager() : nh_()
   std::string vicon_topic( "/vicon/ARGENTINA/ARGENTINA" );
   nh_.param( "vicon_object", vicon_topic, vicon_topic );
   
+  #if __USE_VICON
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
                                     &StateManager::viconCallback, this );
-                                    
+  #endif
+
   std::string vehicle_topic( "/asctec_onboard_data" );
   nh_.param( "vehicle_topic", vehicle_topic, vehicle_topic );
   /*Associate a vehicle data callback */
@@ -36,7 +38,7 @@ StateManager::StateManager() : nh_()
   prev_pd_.resize( filter_len_ );
   lastUpdateTime_ = ros::Time::now();
 }
-
+#if __USE_VICON
 void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
 {
   /* Handle most of the state information directly, except for velocity
@@ -104,6 +106,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
     state_msg.state_vector[idx] = state_vector_[idx];
   state_pub_.publish( state_msg );
 }
+#endif
 
 void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPtr &msg )
 {
