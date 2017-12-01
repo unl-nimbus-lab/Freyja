@@ -3,6 +3,8 @@
 #include "aj_filter_collection.cpp"
 
 #define ROS_NODE_NAME "state_manager"
+
+#define DEG2RAD(D) ((D)*3.1415326/180.0)
 StateManager::StateManager() : nh_()
 {
   state_vector_.resize( STATE_VECTOR_LEN );
@@ -14,13 +16,13 @@ StateManager::StateManager() : nh_()
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
                                     &StateManager::viconCallback, this );
-  #endif
-
+  #else
   std::string vehicle_topic( "/asctec_onboard_data" );
   nh_.param( "vehicle_topic", vehicle_topic, vehicle_topic );
   /*Associate a vehicle data callback */
   asctec_data_sub_ = nh_.subscribe( vehicle_topic, 1,
                                 &StateManager::asctecDataCallback, this );
+  #endif
                                 
   /* Announce state publisher */
   state_pub_ = nh_.advertise <state_manager::CurrentState>
@@ -37,6 +39,7 @@ StateManager::StateManager() : nh_()
   prev_pe_.resize( filter_len_ );
   prev_pd_.resize( filter_len_ );
   lastUpdateTime_ = ros::Time::now();
+  have_location_fix_ = false;
 }
 #if __USE_VICON
 void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
@@ -113,9 +116,19 @@ void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPt
   double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
   double x, y, z;
   
-  x = msg -> best_lat;
-  y = msg -> best_lon;
-  z = -(msg -> hgt);
+  if( (msg -> motor1rpm) > 0 && !have_location_fix_ )
+  {
+    have_location_fix_ = true;
+    home_lat_ = (msg -> best_lat)/10000000.0;
+    home_lon_ = (msg -> best_lon)/10000000.0;
+  }
+  
+  if( !have_location_fix_ )
+    return;
+  
+  x = ( (msg->best_lat)/10000000.0 - home_lat_ )*111050.51;
+  y = ( (msg->best_lon)/10000000.0 - home_lon_ )*84356.28;
+  z = -(msg -> hgt)/1000.0;
   
   prev_pn_.erase( prev_pn_.begin() );
   prev_pn_.push_back( x );
@@ -134,14 +147,14 @@ void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPt
   state_vector_[2] = z;
   
   /* velocities from vehicle */
-  state_vector_[3] = msg -> best_sp_x;
-  state_vector_[4] = msg -> best_sp_y;
-  state_vector_[5] = msg -> best_sp_z;
+  state_vector_[3] = (msg -> best_sp_x)/1000.0;
+  state_vector_[4] = (msg -> best_sp_y)/1000.0;
+  state_vector_[5] = (msg -> best_sp_z)/1000.0;
   
   /* Attitude */
-  state_vector_[6] = msg -> roll_angle;
-  state_vector_[7] = msg -> pitch_angle;
-  state_vector_[8] = msg -> yaw_angle;
+  state_vector_[6] = (msg -> roll_angle)/1000.0;
+  state_vector_[7] = (msg -> pitch_angle)/1000.0;
+  state_vector_[8] = DEG2RAD( (msg -> yaw_angle)/1000.0 );
   
   /* rpy rates */
   state_vector_[9] = 0.0;

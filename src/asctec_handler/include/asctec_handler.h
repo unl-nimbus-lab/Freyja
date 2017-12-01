@@ -13,6 +13,7 @@ Screw it, this node handles serial interface as well!
 */
 
 #include <signal.h>
+#include <thread>
 #include <ros/ros.h>
 #include <lqr_control/CtrlCommand.h>
 #include <state_manager/CurrentState.h>
@@ -70,6 +71,9 @@ class AsctecHandler : public AjSerialInterface
     /* Periodically try to read and call decode function */
     ros::WallTimer read_decode_timer_;
     void readAndDecodePackets( const ros::WallTimerEvent& );
+    
+    std::thread pkt_decode_thread_;
+    void readAndDecodePacketsThreaded();
     
 };
 

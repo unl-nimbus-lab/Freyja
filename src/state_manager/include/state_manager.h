@@ -44,6 +44,9 @@ class StateManager
   /* Filter-specific details for computing velocity */
   int filter_len_;
   
+  double home_lat_, home_lon_;
+  bool have_location_fix_;
+  
   public:
     StateManager();
     #if __USE_VICON

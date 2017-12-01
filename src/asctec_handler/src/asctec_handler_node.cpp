@@ -26,9 +26,9 @@ AsctecHandler::AsctecHandler( const std::string &p, const int b )
   
   asctec_pub_ = nh_.advertise <asctec_handler::AsctecData>
                                           ( "/asctec_onboard_data", 1, true );
-  read_decode_timer_ = nh_.createWallTimer( ros::WallDuration(0.011),
+  read_decode_timer_ = nh_.createWallTimer( ros::WallDuration(0.0008),
                             &AsctecHandler::readAndDecodePackets, this );
-  
+  //pkt_decode_thread_ = std::thread( &AsctecHandler::readAndDecodePacketsThreaded, this );
 
   AjSerialInterface::keep_alive_ = true;
 }
@@ -48,6 +48,7 @@ void AsctecHandler::fake_destructor()
 {
   //AjSerialInterface::keep_alive_ = false;
   ROS_INFO( "AsctecHandler shutting down [fake_destructor]!" );
+  //pkt_decode_thread_.join();
   ros::shutdown();
 }
 
@@ -225,14 +226,51 @@ void AsctecHandler::readAndDecodePackets( const ros::WallTimerEvent& event )
       else
       {
         /* crc does not match, which means false alarm. Need to remove front. */
-        AjSerialInterface::removeFrontElement();
+        //AjSerialInterface::removeFrontElement();
+        removeOnePacketLen( PKT_LEN );
+        ROS_WARN( "crc fail!" );
       }
     }
     else
     {
       /* Not a valid header. Remove front element. */
+      //ROS_ERROR( "not header!" );
       removeFrontElement();
     }
+  }
+}
+
+void AsctecHandler::readAndDecodePacketsThreaded()
+{
+  /* Thread variant of reading and decoding packets because the other one seemed
+  to be dropping a lot of packets for "no reason"
+  */
+  ROS_WARN( "starting thread" );
+  while( AjSerialInterface::showFrontElement(0) != PKT_HEADER_FLAG )
+        removeFrontElement();
+  while( ros::ok() )
+  {
+    std::vector <uint8_t> local_buffer;
+    
+    // maybe a packet.. request that number of bytes
+    if( AjSerialInterface::getPossiblePacket( local_buffer, int(PKT_LEN) ) )
+    { 
+      //    ..which means it should have a valid checksum, right?
+      uint16_t calc_crc = LibNimbusSerial::calcCrc16( local_buffer, PKT_CHKSUM_IDX_1 );
+      uint16_t buf_crc = LibNimbusSerial::unpack16( local_buffer, PKT_CHKSUM_IDX_0 );
+      if( calc_crc == buf_crc )
+      {
+        decodePacket( local_buffer );
+        removeOnePacketLen( PKT_LEN );
+      }
+      else
+      {
+        int useless_bytes = 0;
+        while( AjSerialInterface::showFrontElement(useless_bytes++) != PKT_HEADER_FLAG );
+        removeOnePacketLen( useless_bytes-1 );
+      }
+    }
+    //ros::Duration(0.001).sleep();
   }
 }
 // PKT_TYPE is defined in aj_packet_format.h that is included for this class.
@@ -283,6 +321,7 @@ void AsctecHandler::decodePacket( std::vector<uint8_t> &buffer )
   vehicle_data_.roll_angle = LibNimbusSerial::unpack32( buffer, ANGLE_ROLL_0_IDX );
   vehicle_data_.yaw_angle = LibNimbusSerial::unpack32( buffer, ANGLE_YAW_0_IDX );
   
+  vehicle_data_.motor1rpm = LibNimbusSerial::unpack8( buffer, RPM_M0_IDX );
   vehicle_data_.header.stamp = ros::Time::now();
   asctec_pub_.publish( vehicle_data_ );
 }

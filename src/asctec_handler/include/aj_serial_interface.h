@@ -11,9 +11,9 @@ aj: new serial comm
 #include <chrono>
 
 
-#define MAX_BUFFER_LEN 100000
-#define BUFFER_OVF_DROP 9000
-#define READ_MAX 70
+#define MAX_BUFFER_LEN 1000
+#define BUFFER_OVF_DROP 100
+#define READ_MAX 100
 
 class AjSerialInterface
 {
@@ -55,7 +55,7 @@ public:
         I'm not entirely sure if STL containers are thread-safe in an operation
         at different ends, so I'm going to close this inside mutex access anyway.
       */
-      std::lock_guard <std::mutex> rbmutex( running_buffer_mutex_ );
+      //std::lock_guard <std::mutex> rbmutex( running_buffer_mutex_ );
       running_buffer_.erase( running_buffer_.begin() );
     }
     
@@ -64,8 +64,13 @@ public:
       /* Remove one packet length worth of elements from buffer. Most likely
         because a packet was matched
       */
-      std::lock_guard <std::mutex> rbmutex ( running_buffer_mutex_ );
+      //std::lock_guard <std::mutex> rbmutex ( running_buffer_mutex_ );
       running_buffer_.erase( running_buffer_.begin(), running_buffer_.begin() + len );
+    }
+    
+    uint8_t showFrontElement( int idx )
+    {
+      return (running_buffer_.size() > 0) ? running_buffer_[ idx ] : 0;
     }
     
 };

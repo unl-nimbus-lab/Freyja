@@ -15,7 +15,7 @@ AjSerialInterface::AjSerialInterface( const std::string &port, const int &rate )
     reader_thread_ = std::thread( &AjSerialInterface::readThread, this );
     keep_alive_ = true;
     recv_buffer_.resize( READ_MAX );
-    time_between_reads_ = 4;
+    time_between_reads_ = 5;
   }
 }
 
