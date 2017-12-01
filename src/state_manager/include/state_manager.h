@@ -13,6 +13,7 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <state_manager/CurrentState.h>
 #include <tf/tf.h>
+#include <asctec_handler/AsctecData.h>
 #define __USE_VICON 1
 
 typedef geometry_msgs::TransformStamped TFStamped;
@@ -47,6 +48,10 @@ class StateManager
     /* Callback handler for Vicon */
     ros::Subscriber vicon_data_sub_;
     void viconCallback( const TFStamped::ConstPtr & );
+    
+    /* Callback handler for asctec_onboard_data */
+    ros::Subscriber asctec_data_sub_;
+    void asctecDataCallback( const asctec_handler::AsctecData::ConstPtr & );
     
     /* Publisher for state information */
     ros::Publisher state_pub_;

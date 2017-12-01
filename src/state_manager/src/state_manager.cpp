@@ -13,6 +13,13 @@ StateManager::StateManager() : nh_()
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
                                     &StateManager::viconCallback, this );
+                                    
+  std::string vehicle_topic( "/asctec_onboard_data" );
+  nh_.param( "vehicle_topic", vehicle_topic, vehicle_topic );
+  /*Associate a vehicle data callback */
+  asctec_data_sub_ = nh_.subscribe( vehicle_topic, 1,
+                                &StateManager::asctecDataCallback, this );
+                                
   /* Announce state publisher */
   state_pub_ = nh_.advertise <state_manager::CurrentState>
                   ( "current_state", 1, true ); 
@@ -73,6 +80,65 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   state_vector_[6] = roll;
   state_vector_[7] = pitch;
   state_vector_[8] = -yaw;
+  
+  /* rpy rates */
+  state_vector_[9] = 0.0;
+  state_vector_[10] = 0.0;
+  state_vector_[11] = 0.0;
+  
+  /* age */
+  state_vector_[12] = time_since;
+  
+  /* Update the current time this happened */
+  lastUpdateTime_ = ros::Time::now();
+  
+  /* bookkeeping stuff */
+  last_pn_ = state_vector_[0];
+  last_pe_ = state_vector_[1];
+  last_pd_ = state_vector_[2];
+  
+  /* Copy over and publish right away */
+  state_manager::CurrentState state_msg;
+  state_msg.header.stamp = ros::Time::now();
+  for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
+    state_msg.state_vector[idx] = state_vector_[idx];
+  state_pub_.publish( state_msg );
+}
+
+void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPtr &msg )
+{
+  double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
+  double x, y, z;
+  
+  x = msg -> best_lat;
+  y = msg -> best_lon;
+  z = -(msg -> hgt);
+  
+  prev_pn_.erase( prev_pn_.begin() );
+  prev_pn_.push_back( x );
+  prev_pe_.erase( prev_pe_.begin() );
+  prev_pe_.push_back( y );
+  prev_pd_.erase( prev_pd_.begin() );
+  prev_pd_.push_back( z );
+  
+  AjFilterCollection::filterObservations( "gauss", prev_pn_, x );
+  AjFilterCollection::filterObservations( "gauss", prev_pe_, y );
+  AjFilterCollection::filterObservations( "gauss", prev_pd_, z );
+//  ROS_INFO("%0.3f", x);
+  /* positions */
+  state_vector_[0] = x;
+  state_vector_[1] = y;
+  state_vector_[2] = z;
+  
+  /* velocities from vehicle */
+  state_vector_[3] = msg -> best_sp_x;
+  state_vector_[4] = msg -> best_sp_y;
+  state_vector_[5] = msg -> best_sp_z;
+  
+  /* Attitude */
+  state_vector_[6] = msg -> roll_angle;
+  state_vector_[7] = msg -> pitch_angle;
+  state_vector_[8] = msg -> yaw_angle;
   
   /* rpy rates */
   state_vector_[9] = 0.0;
