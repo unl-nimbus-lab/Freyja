@@ -3,7 +3,9 @@
   
   <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" />
   
-  <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" output="screen"/>
+  <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" output="screen" >
+    <param name="serial_port" value="/dev/ttyUSB0" />
+  </node>
   
-  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node" />
+  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node" output="screen" />
 </launch>

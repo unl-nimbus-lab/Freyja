@@ -13,17 +13,16 @@ AsctecHandler::AsctecHandler( const std::string &p, const int b )
   nh_.param( "control_topic", command_topic, command_topic );
   rpyt_cmd_sub_ = nh_.subscribe( command_topic, 1,
                                  &AsctecHandler::rpytCommandCallback, this );
-                                 
+
   std::string motor_topic( "/motors_event" );
   nh_.param( "motors_topic", motor_topic, motor_topic );
   motor_handler_sub_ = nh_.subscribe( motor_topic, 1,
                                  &AsctecHandler::motorHandlerCallback, this);
-                                 
 
   /* Serial initialization stuff */
   write_buffer_.clear();
   write_buffer_.resize( PRY_PKT_LEN );
-  
+
   asctec_pub_ = nh_.advertise <asctec_handler::AsctecData>
                                           ( "/asctec_onboard_data", 1, true );
   read_decode_timer_ = nh_.createWallTimer( ros::WallDuration(0.0008),
@@ -55,7 +54,7 @@ void AsctecHandler::fake_destructor()
 void AsctecHandler::limitLqrCommands( float &r, float &p, float &y, float &t )
 {
   /* Remap thrust so that [+5 .. -5] is  [+1 .. -1] */
-  t = t - 5.5;
+  t = t - 6.0;
   t /= 5.0;
 }
 
@@ -322,6 +321,12 @@ void AsctecHandler::decodePacket( std::vector<uint8_t> &buffer )
   vehicle_data_.yaw_angle = LibNimbusSerial::unpack32( buffer, ANGLE_YAW_0_IDX );
   
   vehicle_data_.motor1rpm = LibNimbusSerial::unpack8( buffer, RPM_M0_IDX );
+  vehicle_data_.motor2rpm = LibNimbusSerial::unpack8( buffer, RPM_M1_IDX );
+  vehicle_data_.motor3rpm = LibNimbusSerial::unpack8( buffer, RPM_M2_IDX );
+  vehicle_data_.motor4rpm = LibNimbusSerial::unpack8( buffer, RPM_M3_IDX );
+  vehicle_data_.motor5rpm = LibNimbusSerial::unpack8( buffer, RPM_M4_IDX );
+  vehicle_data_.motor6rpm = LibNimbusSerial::unpack8( buffer, RPM_M5_IDX );
+
   vehicle_data_.header.stamp = ros::Time::now();
   asctec_pub_.publish( vehicle_data_ );
 }
