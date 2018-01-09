@@ -9,7 +9,7 @@
 #ifndef __STATE_INFO_GENERATOR_H__
 #define __STATE_INFO_GENERATOR_H__
 
-#define __USE_VICON 0
+#define __USE_VICON 1
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <state_manager/CurrentState.h>
