@@ -326,7 +326,6 @@ void AsctecHandler::decodePacket( std::vector<uint8_t> &buffer )
   vehicle_data_.motor4rpm = LibNimbusSerial::unpack8( buffer, RPM_M3_IDX );
   vehicle_data_.motor5rpm = LibNimbusSerial::unpack8( buffer, RPM_M4_IDX );
   vehicle_data_.motor6rpm = LibNimbusSerial::unpack8( buffer, RPM_M5_IDX );
-
   vehicle_data_.header.stamp = ros::Time::now();
   asctec_pub_.publish( vehicle_data_ );
 }

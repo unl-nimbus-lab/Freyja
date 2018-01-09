@@ -1,7 +1,9 @@
 <launch>
   <node name="state_manager" pkg="state_manager" type="state_manager_node" />
   
-  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" />
+  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" >
+    <param name="controller_rate" value="50" type="int" />
+  </node>
   
   <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" output="screen" >
     <param name="serial_port" value="/dev/ttyUSB0" />

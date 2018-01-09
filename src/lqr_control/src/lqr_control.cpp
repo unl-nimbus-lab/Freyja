@@ -13,7 +13,7 @@
 #define ROS_NODE_NAME "lqr_control"
 LQRController::LQRController() : nh_()
 {
-  int controller_rate_default = 100;
+  int controller_rate_default = 50;
   nh_.param( "controller_rate", controller_rate_, controller_rate_default );
   
   float mass_default = 0.55;
