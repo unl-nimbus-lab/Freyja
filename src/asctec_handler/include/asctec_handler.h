@@ -62,6 +62,7 @@ class AsctecHandler : public AjSerialInterface
     void turnMotorsOff();
     void motorsIdle();
     void sendCtrlCommands();
+    void FormCmdPacketForLLP( int16_t, int16_t, int16_t, int16_t, uint8_t );
     
     /* Publisher for decoded data packets */
     ros::Publisher asctec_pub_;

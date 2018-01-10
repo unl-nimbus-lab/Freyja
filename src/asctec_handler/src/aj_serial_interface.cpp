@@ -17,6 +17,12 @@ AjSerialInterface::AjSerialInterface( const std::string &port, const int &rate )
     recv_buffer_.resize( READ_MAX );
     time_between_reads_ = 5;
   }
+  /* Interface for writing commands to LLP */
+  ret = LibNimbusSerial::initSerialInterface( "/dev/ttyUSB1", rate, serial_fd_write_ );
+  if( ret == 0 )
+  {
+    ROS_INFO( "Write interface up! Running on file: %d", serial_fd_write_ );
+  }
 }
 
 AjSerialInterface::~AjSerialInterface()
@@ -26,6 +32,8 @@ AjSerialInterface::~AjSerialInterface()
     
   /* Close the serial interface, "gracefully" */
   if( LibNimbusSerial::closeSerialInterface( serial_fd_ ) == 0 )
+    ROS_INFO( "Serial interface closed." );
+  if( LibNimbusSerial::closeSerialInterface( serial_fd_write_ ) == 0 )
     ROS_INFO( "Serial interface closed." );
   
 }
@@ -45,7 +53,7 @@ void AjSerialInterface::readThread()
 void AjSerialInterface::writeCommandPacket()
 {
   /* Write to serial port now */
-  LibNimbusSerial::sendSerial( serial_fd_, write_buffer_ );
+  LibNimbusSerial::sendSerial( serial_fd_write_, write_buffer_ );
 }
 
 void AjSerialInterface::readPacket()

@@ -95,6 +95,9 @@ void AsctecHandler::rpytCommandCallback( const lqr_control::CtrlCommand::ConstPt
   
   /* put into the write buffer */
   write_buffer_.clear();
+  write_buffer_.resize(17);
+  FormCmdPacketForLLP( pitch, roll, yaw, thrust, ctrl_bits );
+  /*
   write_buffer_.resize( PRY_PKT_LEN );
   LibNimbusSerial::pack8( PRY_HEADER_VAL, PRY_HEADER_IDX, write_buffer_ );
   LibNimbusSerial::pack16( pitch, PRY_PITCH_LOW, write_buffer_ );
@@ -108,8 +111,27 @@ void AsctecHandler::rpytCommandCallback( const lqr_control::CtrlCommand::ConstPt
   
   //ROS_ASSERT( write_buffer_.size() < PRY_PKT_LEN );
   //ROS_WARN( "writing [rpyt]: %d, %d, %d, %d", roll, pitch, yaw, thrust );
+  */
   writeCommandPacket();
 }
+void AsctecHandler::FormCmdPacketForLLP( int16_t pitch, int16_t roll, int16_t yaw, int16_t thrust, uint8_t ctrl_bits )
+{
+  // { '>', '*', '>', 'd', 'i' }
+  write_buffer_[0] = static_cast<uint8_t>( '>' );
+  write_buffer_[1] = static_cast<uint8_t>( '*' );
+  write_buffer_[2] = static_cast<uint8_t>( '>' );
+  write_buffer_[3] = static_cast<uint8_t>( 'd' );
+  write_buffer_[4] = static_cast<uint8_t>( 'i' );
+  LibNimbusSerial::pack16( pitch, 6, write_buffer_ );
+  LibNimbusSerial::pack16( roll, 8, write_buffer_ );
+  LibNimbusSerial::pack16( yaw, 10, write_buffer_ );
+  LibNimbusSerial::pack16( thrust, 12, write_buffer_ );
+  int16_t ctrl_bits_16 = ctrl_bits;
+  LibNimbusSerial::pack16( ctrl_bits_16, 14, write_buffer_ );
+  uint16_t crc = pitch + roll + yaw + thrust + ctrl_bits_16 + 0xAAAA; 
+  LibNimbusSerial::pack16( crc, 16, write_buffer_ );
+}
+
 
 void AsctecHandler::motorHandlerCallback( const asctec_handler::MotorCommand::ConstPtr &msg )
 {

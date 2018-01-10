@@ -28,7 +28,10 @@ protected:
   
   /* Port characteristics */
   int32_t serial_fd_;
+  int32_t serial_fd_write_;
+  
   std::string serial_port_name_;
+  std::string serial_port_name_write_;
   int32_t baudrate_;
   
   /* Derived classes can explicitly tell read methods to stop */
