@@ -77,15 +77,11 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   prev_pe_.push_back( y );
   prev_pd_.erase( prev_pd_.begin() );
   prev_pd_.push_back( z );
-  
-//  for( auto pn : prev_pn_ )
-//    printf("%0.4f ", pn);
-//  std::cout << prev_pn_.size() << std::endl;
 
   AjFilterCollection::filterObservations( filter_type_, prev_pn_, x );
   AjFilterCollection::filterObservations( filter_type_, prev_pe_, y );
   AjFilterCollection::filterObservations( filter_type_, prev_pd_, z );
-//  ROS_INFO("%0.4f", x);
+
   /* positions */
   state_vector_[0] = x;
   state_vector_[1] = y;
@@ -108,6 +104,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   state_vector_[3] = vx;
   state_vector_[4] = vy;
   state_vector_[5] = vz;
+  
   /* rpy */
   tf::Quaternion q;
   tf::quaternionMsgToTF( msg -> transform.rotation, q );
@@ -117,7 +114,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   state_vector_[7] = pitch;
   state_vector_[8] = -yaw;
   
-  /* rpy rates */
+  /* rpy rates -- who cares! */
   state_vector_[9] = 0.0;
   state_vector_[10] = 0.0;
   state_vector_[11] = 0.0;
