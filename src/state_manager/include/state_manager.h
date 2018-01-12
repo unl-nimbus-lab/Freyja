@@ -37,6 +37,10 @@ class StateManager
   std::vector<double> prev_pe_;
   std::vector<double> prev_pd_;
   
+  std::vector<double> prev_vn_;
+  std::vector<double> prev_ve_;
+  std::vector<double> prev_vd_;
+  
   float last_pn_, last_pe_, last_pd_;
   
   ros::Time lastUpdateTime_;

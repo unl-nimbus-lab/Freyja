@@ -49,6 +49,10 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   prev_pn_.resize( filter_len_ );
   prev_pe_.resize( filter_len_ );
   prev_pd_.resize( filter_len_ );
+  
+  prev_vn_.resize( filter_len_ );
+  prev_ve_.resize( filter_len_ );
+  prev_vd_.resize( filter_len_ );
   lastUpdateTime_ = ros::Time::now();
   have_location_fix_ = false;
 }
@@ -88,10 +92,22 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   state_vector_[2] = z;
   
   /* velocities */
-  state_vector_[3] = ( x - last_pn_ )/time_since;
-  state_vector_[4] = ( y - last_pe_ )/time_since;
-  state_vector_[5] = ( z - last_pd_ )/time_since;
-  
+  double vx, vy, vz;
+  vx = ( x - last_pn_ )/time_since; //[3]
+  vy = ( y - last_pe_ )/time_since; //[4]
+  vz = ( z - last_pd_ )/time_since;
+  prev_vn_.erase( prev_vn_.begin() );
+  prev_vn_.push_back( vx );
+  prev_ve_.erase( prev_ve_.begin() );
+  prev_ve_.push_back( vy );
+  prev_vd_.erase( prev_vd_.begin() );
+  prev_vd_.push_back( vz );
+  AjFilterCollection::filterObservations( filter_type_, prev_vn_, vx );
+  AjFilterCollection::filterObservations( filter_type_, prev_ve_, vy );
+  AjFilterCollection::filterObservations( filter_type_, prev_vd_, vz );
+  state_vector_[3] = vx;
+  state_vector_[4] = vy;
+  state_vector_[5] = vz;
   /* rpy */
   tf::Quaternion q;
   tf::quaternionMsgToTF( msg -> transform.rotation, q );
