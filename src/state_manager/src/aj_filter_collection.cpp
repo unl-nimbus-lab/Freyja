@@ -10,8 +10,10 @@
 namespace AjFilterCollection
 {
   std::vector<double> gauss_filter_coeff;
+  std::vector<double> lwma_filter_coeff;
   int filter_len;
   
+  void initLwmaFilter( const std::string &, const int & );
   void initGaussianFilter( std::vector<double> &, const int & );
   void filterObservations( const std::string &,
                            std::vector<double> &,
@@ -28,6 +30,42 @@ void AjFilterCollection::initGaussianFilter( std::vector<double> &fc, const int 
     filter_len = len;
     gauss_filter_coeff = fc;
   }
+  
+void AjFilterCollection::initLwmaFilter( const std::string &weight_type,
+                                         const int &window_size )
+{
+  /* A locally weighted moving average filter is simply a moving average
+     filter with non-uniform weights. It is essentially a loess/lowess
+     regression. I am not sure how much "better" this is yet.
+     Weight type determines the way weights are associated:
+      simple: linearly decreasing weights as we go away from the current point
+      cubic : loess' preferred way of doing it
+  */
+  filter_len = window_size;
+  
+  double win = window_size;
+  
+  lwma_filter_coeff.resize( window_size );
+  for( int idx = 0; idx < window_size; idx++ )
+    lwma_filter_coeff[idx] = (idx+1)/win;
+  if( weight_type == "sqaured" )
+  {
+    /* multiply once more by i/w */
+    for( int idx = 0; idx < window_size; idx++ )
+    {
+      lwma_filter_coeff[idx] *= (idx+1)/win;
+    }
+  }
+  else if( weight_type == "cubic" )
+  {
+    /* compute the cube: multiply by i^2/w^2 */
+    win = win*win;
+    for( int idx = 0; idx < window_size; idx++ )
+    {
+      lwma_filter_coeff[idx] *= ((idx+1)*(idx+1))/win;
+    }
+  }
+}
   
 void AjFilterCollection::filterObservations( const std::string &filter_name,
                                           std::vector<double> &obs,
@@ -48,6 +86,20 @@ void AjFilterCollection::filterObservations( const std::string &filter_name,
         ROS_WARN( "Filter length does not match!" );
         retVal = obs.back();
       } 
+    }
+    else if( filter_name == "lwma")
+    {
+      if( obs.size() == filter_len )
+      {
+        retVal = std::inner_product( lwma_filter_coeff.begin(),
+                                  lwma_filter_coeff.end(), obs.begin(), 0.0 );
+        retVal/=double(filter_len);
+      }
+      else
+      {
+        ROS_WARN( "Filter length does not match!" );
+        retVal = obs.back();
+      }
     }
     else
     {
