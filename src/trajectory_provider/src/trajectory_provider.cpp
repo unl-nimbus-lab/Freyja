@@ -14,7 +14,7 @@
 #define ROS_NODE_NAME "trajectory_provider"
 typedef trajectory_provider::ReferenceState TrajRef;
 
-/* HOVER AT A POINT 
+// HOVER AT A POINT 
 TrajRef getCurrentReference( const ros::Duration &cur_time )
 {
   TrajRef ref_state;
@@ -28,7 +28,7 @@ TrajRef getCurrentReference( const ros::Duration &cur_time )
   ref_state.header.stamp = ros::Time::now();
   return ref_state;
 }
-*/
+/*
 
 TrajRef getCurrentReference( const ros::Duration &cur_time )
 {
@@ -146,7 +146,7 @@ TrajRef getCurrentReference( const ros::Duration &cur_time )
   ref_state.yaw = 0.0;
   return ref_state;
 }
-
+*/
 /*
 TrajRef getCurerntReference( const ros::Duration &cur_time )
 {

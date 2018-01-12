@@ -1,5 +1,8 @@
 <launch>
-  <node name="state_manager" pkg="state_manager" type="state_manager_node" />
+  <node name="state_manager" pkg="state_manager" type="state_manager_node" output="screen" >
+    <param name="filter_type" type="string" value="lwma" />
+    <param name="vicon_object" type="string" value="/vicon/ARGENTINA/ARGENTINA" />
+  </node>
   
   <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" >
     <param name="controller_rate" value="50" type="int" />

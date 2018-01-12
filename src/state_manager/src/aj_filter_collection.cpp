@@ -12,7 +12,8 @@ namespace AjFilterCollection
   std::vector<double> gauss_filter_coeff;
   std::vector<double> lwma_filter_coeff;
   int filter_len;
-  
+  double weight_scaler;
+
   void initLwmaFilter( const std::string &, const int & );
   void initGaussianFilter( std::vector<double> &, const int & );
   void filterObservations( const std::string &,
@@ -29,6 +30,7 @@ void AjFilterCollection::initGaussianFilter( std::vector<double> &fc, const int 
     */
     filter_len = len;
     gauss_filter_coeff = fc;
+    weight_scaler = std::accumulate( fc.begin(), fc.end(), 0.0 );
   }
   
 void AjFilterCollection::initLwmaFilter( const std::string &weight_type,
@@ -42,31 +44,41 @@ void AjFilterCollection::initLwmaFilter( const std::string &weight_type,
       cubic : loess' preferred way of doing it
   */
   filter_len = window_size;
-  
+  weight_scaler = 0.0;
+
   double win = window_size;
-  
+
   lwma_filter_coeff.resize( window_size );
   for( int idx = 0; idx < window_size; idx++ )
-    lwma_filter_coeff[idx] = (idx+1)/win;
-  if( weight_type == "sqaured" )
   {
+    lwma_filter_coeff[idx] = (idx+1)/win;
+    weight_scaler += (idx+1)/win;
+  }
+  if( weight_type == "squared" )
+  {
+    weight_scaler = 0.0;
     /* multiply once more by i/w */
     for( int idx = 0; idx < window_size; idx++ )
     {
       lwma_filter_coeff[idx] *= (idx+1)/win;
+      weight_scaler += ((idx+1)*(idx+1)/(win*win));
     }
   }
   else if( weight_type == "cubic" )
   {
+    weight_scaler = 0.0;
     /* compute the cube: multiply by i^2/w^2 */
     win = win*win;
     for( int idx = 0; idx < window_size; idx++ )
     {
       lwma_filter_coeff[idx] *= ((idx+1)*(idx+1))/win;
+      weight_scaler += ((idx+1)*(idx+1)*(idx+1)/(win*window_size));
     }
   }
+  for( int idx = 0; idx < window_size; idx++ )
+    std::cout << lwma_filter_coeff[idx] << " ";
 }
-  
+
 void AjFilterCollection::filterObservations( const std::string &filter_name,
                                           std::vector<double> &obs,
                                           double &retVal )
@@ -79,7 +91,7 @@ void AjFilterCollection::filterObservations( const std::string &filter_name,
       if( obs.size() == filter_len )
       {
         retVal = std::inner_product( gauss_filter_coeff.begin(),
-                                    gauss_filter_coeff.end(), obs.begin(), 0.0 );
+                                    gauss_filter_coeff.end(), obs.begin(), 0.0 )/weight_scaler;
       }
       else
       {
@@ -92,8 +104,12 @@ void AjFilterCollection::filterObservations( const std::string &filter_name,
       if( obs.size() == filter_len )
       {
         retVal = std::inner_product( lwma_filter_coeff.begin(),
-                                  lwma_filter_coeff.end(), obs.begin(), 0.0 );
-        retVal/=double(filter_len);
+                 lwma_filter_coeff.end(), obs.begin(), 0.0 )/weight_scaler;
+        //retVal/=double(filter_len);
+        //double r = 0;
+        //for( int idx = 0; idx < filter_len; idx++ )
+        //  r += ( lwma_filter_coeff[idx] * obs[idx] );
+        //retVal = r;
       }
       else
       {

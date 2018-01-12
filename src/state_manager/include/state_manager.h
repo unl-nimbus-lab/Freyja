@@ -27,7 +27,7 @@ typedef geometry_msgs::TransformStamped TFStamped;
 const int STATE_VECTOR_LEN = 13;
 class StateManager
 {
-  ros::NodeHandle nh_;
+  ros::NodeHandle nh_, priv_nh_;
   
   /* Object for actual full-state */
   std::vector<double> state_vector_;
@@ -43,6 +43,7 @@ class StateManager
   
   /* Filter-specific details for computing velocity */
   int filter_len_;
+  std::string filter_type_;
   
   double home_lat_, home_lon_;
   bool have_location_fix_;

@@ -5,13 +5,13 @@
 #define ROS_NODE_NAME "state_manager"
 
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
-StateManager::StateManager() : nh_()
+StateManager::StateManager() : nh_(), priv_nh_("~")
 {
   state_vector_.resize( STATE_VECTOR_LEN );
   
   std::string vicon_topic( "/vicon/ARGENTINA/ARGENTINA" );
-  nh_.param( "vicon_object", vicon_topic, vicon_topic );
-  
+  priv_nh_.param( "vicon_object", vicon_topic, vicon_topic );
+  priv_nh_.param( "filter_type", filter_type_, std::string("lwma") );
   #if __USE_VICON
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
@@ -23,18 +23,29 @@ StateManager::StateManager() : nh_()
   asctec_data_sub_ = nh_.subscribe( vehicle_topic, 1,
                                 &StateManager::asctecDataCallback, this );
   #endif
-                                
+
   /* Announce state publisher */
   state_pub_ = nh_.advertise <state_manager::CurrentState>
                   ( "current_state", 1, true ); 
 
-  /* Init filter: mean 10, stddev = 5 */
-  filter_len_ = 21;
-  std::vector<double> fc = { 0.0108, 0.0158, 0.0222, 0.0299, 0.0388, 0.0484, 
-                            0.0579, 0.0666, 0.0737, 0.0782, 0.0798, 0.0782,
-                            0.0737, 0.0666, 0.0579, 0.0484, 0.0388, 0.0299,
-                            0.0222, 0.0158, 0.0108};
-  AjFilterCollection::initGaussianFilter( fc, filter_len_ );
+  if( filter_type_ == "gauss" )
+  {
+    /* Init filter: mean 10, stddev = 5 */
+    filter_len_ = 21;
+    std::vector<double> fc = { 0.0108, 0.0158, 0.0222, 0.0299, 0.0388, 0.0484, 
+                              0.0579, 0.0666, 0.0737, 0.0782, 0.0798, 0.0782,
+                              0.0737, 0.0666, 0.0579, 0.0484, 0.0388, 0.0299,
+                              0.0222, 0.0158, 0.0108};
+    AjFilterCollection::initGaussianFilter( fc, filter_len_ );
+    ROS_INFO( "Gaussian filter init!" );
+  }
+  else if( filter_type_ == "lwma" )
+  {
+    /* The init function automatically fills in the coeffs for lwma */
+    filter_len_ = 50;
+    AjFilterCollection::initLwmaFilter( "simple", filter_len_ );
+    ROS_INFO( "LWMA filter init!" );
+  }
   prev_pn_.resize( filter_len_ );
   prev_pe_.resize( filter_len_ );
   prev_pd_.resize( filter_len_ );
@@ -63,10 +74,14 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   prev_pd_.erase( prev_pd_.begin() );
   prev_pd_.push_back( z );
   
-  AjFilterCollection::filterObservations( "gauss", prev_pn_, x );
-  AjFilterCollection::filterObservations( "gauss", prev_pe_, y );
-  AjFilterCollection::filterObservations( "gauss", prev_pd_, z );
-//  ROS_INFO("%0.3f", x);
+//  for( auto pn : prev_pn_ )
+//    printf("%0.4f ", pn);
+//  std::cout << prev_pn_.size() << std::endl;
+
+  AjFilterCollection::filterObservations( filter_type_, prev_pn_, x );
+  AjFilterCollection::filterObservations( filter_type_, prev_pe_, y );
+  AjFilterCollection::filterObservations( filter_type_, prev_pd_, z );
+//  ROS_INFO("%0.4f", x);
   /* positions */
   state_vector_[0] = x;
   state_vector_[1] = y;
