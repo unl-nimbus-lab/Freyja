@@ -1,0 +1,24 @@
+%implements s14_b0_zd7eq_Terminate "C"
+
+%function Terminate(block, system) Output
+%assign cfgTxt = ""
+%openfile cfgTxt
+%assign localVarDecl = ""
+neu_destroy_diagnostic_manager((NeuDiagnosticManager *)rtDW.iweq3fmzfv);
+nesl_destroy_simulation_data((NeslSimulationData *)rtDW.fu1bp1db1b);
+nesl_erase_simulator("quad_model/Solver Configuration_1");
+neu_destroy_diagnostic_manager((NeuDiagnosticManager *)rtDW.fd053g150p);
+nesl_destroy_simulation_data((NeslSimulationData *)rtDW.nkrujqw2me);
+nesl_erase_simulator("quad_model/Solver Configuration_1");
+neu_destroy_diagnostic_manager((NeuDiagnosticManager *)rtDW.k5iw0zvurl);
+nesl_destroy_simulation_data((NeslSimulationData *)rtDW.dgka05xe11);
+nesl_erase_simulator("quad_model/Solver Configuration_1");
+%closefile cfgTxt
+%<cfgTxt>
+%assign fcnProtoType = ""
+%openfile fcnProtoType
+static void Terminate(\
+%assign comma = ""
+%closefile fcnProtoType
+%<SLibCG_SetFcnProtoType(0, 7, fcnProtoType)>
+%endfunction

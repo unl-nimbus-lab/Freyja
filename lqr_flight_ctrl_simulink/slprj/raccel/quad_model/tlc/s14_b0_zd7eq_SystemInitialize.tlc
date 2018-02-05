@@ -1,0 +1,38 @@
+%implements s14_b0_zd7eq_SystemInitialize "C"
+
+%function SystemInitialize(block, system) Output
+%assign cfgTxt = ""
+%openfile cfgTxt
+%assign localVarDecl = ""
+%openfile localVarDecl
+boolean_T tmp;
+int_T tmp_p;
+char *tmp_e;
+%closefile localVarDecl
+%<SLibInsertAsyncTaskInitializeCode(system)>
+%<SLibWriteMachineInitialize()>
+tmp = %<(SLibCG_SE(SLibCGIRIsModeReferenceForASimstructBasedTarget()))>;
+if (tmp) {
+    tmp_p = strcmp("ode15s", %<(RTMSolverGet("SolverName"))>);
+    if (tmp_p != 0) {
+        tmp_e = solver_mismatch_message("ode15s", %<(RTMSolverGet("SolverName"))>);
+        %<(LibSetRTModelErrorStatus("tmp_e"))>;
+    }
+}
+rtX.eclxswx3o1 = rtP.Filter_IC;
+rtX.nrtkru04fn = rtP.Integrator_IC;
+rtX.gxunomsa10 = rtP.Filter_IC_pvy1hs4ryc;
+rtX.b2q1wtfuy0 = rtP.Integrator_IC_jxv2uzdifp;
+rtX.mac20sf5xm = rtP.Filter_IC_bpkom4hskk;
+rtX.c1lnotgjhi = rtP.Integrator_IC_b5et00bo4s;
+%<SLibInsertInitPeriodicCStatesFcn(system)>
+%closefile cfgTxt
+%<cfgTxt>
+%assign fcnProtoType = ""
+%openfile fcnProtoType
+static void SystemInitialize(\
+%assign comma = ""
+%closefile fcnProtoType
+%<SLibCG_SetFcnProtoType(0, 1, fcnProtoType)>
+%<LibSetSystemField(system, "CachedSystemInitializeLocalVars", localVarDecl)>
+%endfunction
