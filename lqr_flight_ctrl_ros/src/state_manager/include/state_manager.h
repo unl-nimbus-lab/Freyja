@@ -32,16 +32,24 @@ class StateManager
   /* Object for actual full-state */
   std::vector<double> state_vector_;
   
-  /* Store last n positions to compute velocity */
+  /* Store last n positions to smoothe it out */
   std::vector<double> prev_pn_;
   std::vector<double> prev_pe_;
   std::vector<double> prev_pd_;
   
+  /* Store last n velocities to smoothe it out */
   std::vector<double> prev_vn_;
   std::vector<double> prev_ve_;
   std::vector<double> prev_vd_;
   
+  /* Store last n angles to smoothe it out */
+  std::vector<double> prev_roll_;
+  std::vector<double> prev_pitch_;
+  std::vector<double> prev_yaw;
+  
+  /* Book-keeping for velocities and rates */
   float last_pn_, last_pe_, last_pd_;
+  float last_roll_, last_pitch_, last_yaw_;
   
   ros::Time lastUpdateTime_;
   
@@ -58,12 +66,11 @@ class StateManager
     /* Callback handler for Vicon */
     ros::Subscriber vicon_data_sub_;
     void viconCallback( const TFStamped::ConstPtr & );
-    #endif
-
+    #else
     /* Callback handler for asctec_onboard_data */
     ros::Subscriber asctec_data_sub_;
     void asctecDataCallback( const asctec_handler::AsctecData::ConstPtr & );
-    
+    #endif
     /* Publisher for state information */
     ros::Publisher state_pub_;
     

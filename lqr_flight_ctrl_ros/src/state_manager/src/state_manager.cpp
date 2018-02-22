@@ -70,7 +70,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   x = msg -> transform.translation.y;
   y = msg -> transform.translation.x;
   z = -(msg -> transform.translation.z);
-//  ROS_INFO("%0.3f", x);
+
   prev_pn_.erase( prev_pn_.begin() );
   prev_pn_.push_back( x );
   prev_pe_.erase( prev_pe_.begin() );
@@ -113,13 +113,14 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   state_vector_[6] = roll;
   state_vector_[7] = pitch;
   state_vector_[8] = -yaw;
+
   
-  /* rpy rates -- who cares! */
-  state_vector_[9] = 0.0;
-  state_vector_[10] = 0.0;
-  state_vector_[11] = 0.0;
+  /* rpy rates (no filter yet, use with caution!) */
+  state_vector_[9] = ( roll - last_roll_ )/time_since;
+  state_vector_[10] = ( pitch - last_pitch_ )/time_since;
+  state_vector_[11] = ( yaw - last_yaw_ )/time_since;
   
-  /* age */
+  /* age of this data */
   state_vector_[12] = time_since;
   
   /* Update the current time this happened */
@@ -129,6 +130,9 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   last_pn_ = state_vector_[0];
   last_pe_ = state_vector_[1];
   last_pd_ = state_vector_[2];
+  last_roll_ = roll;
+  last_pitch_ = pitch;
+  last_yaw_ = yaw;
   
   /* Copy over and publish right away */
   state_manager::CurrentState state_msg;
@@ -137,8 +141,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
     state_msg.state_vector[idx] = state_vector_[idx];
   state_pub_.publish( state_msg );
 }
-#endif
-
+#else
 void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPtr &msg )
 {
   double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
@@ -207,6 +210,7 @@ void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPt
     state_msg.state_vector[idx] = state_vector_[idx];
   state_pub_.publish( state_msg );
 }
+#endif
 
 void StateManager::computeVelocity( float &x, float &y, float &z, float &t )
 {
