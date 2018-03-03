@@ -1,6 +1,6 @@
 
 #include "state_manager.h"
-#include "aj_filter_collection.cpp"
+//#include "aj_filter_collection.cpp"
 
 #define ROS_NODE_NAME "state_manager"
 
@@ -12,6 +12,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   std::string vicon_topic( "/vicon/ARGENTINA/ARGENTINA" );
   priv_nh_.param( "vicon_object", vicon_topic, vicon_topic );
   priv_nh_.param( "filter_type", filter_type_, std::string("lwma") );
+  priv_nh_.param( "filter_length", filter_len_, int(21) );
   #if __USE_VICON
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
@@ -36,15 +37,22 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
                               0.0579, 0.0666, 0.0737, 0.0782, 0.0798, 0.0782,
                               0.0737, 0.0666, 0.0579, 0.0484, 0.0388, 0.0299,
                               0.0222, 0.0158, 0.0108};
-    AjFilterCollection::initGaussianFilter( fc, filter_len_ );
+    pose_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );
+    rate_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );
     ROS_INFO( "Gaussian filter init!" );
   }
   else if( filter_type_ == "lwma" )
   {
     /* The init function automatically fills in the coeffs for lwma */
-    filter_len_ = 50;
-    AjFilterCollection::initLwmaFilter( "simple", filter_len_ );
+    filter_len_ = 20;
+    pose_filter_ = AjFilterCollection( filter_len_, "lwma", "squared" );
+    rate_filter_ = AjFilterCollection( filter_len_, "lwma", "squared" );
     ROS_INFO( "LWMA filter init!" );
+  }
+  else if( filter_type_ == "median" )
+  {
+    pose_filter_ = AjFilterCollection( -1, "median", "~" );
+    rate_filter_ = AjFilterCollection( -1, "median", "~" );
   }
   prev_pn_.resize( filter_len_ );
   prev_pe_.resize( filter_len_ );
@@ -78,9 +86,10 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   prev_pd_.erase( prev_pd_.begin() );
   prev_pd_.push_back( z );
 
-  AjFilterCollection::filterObservations( filter_type_, prev_pn_, x );
-  AjFilterCollection::filterObservations( filter_type_, prev_pe_, y );
-  AjFilterCollection::filterObservations( filter_type_, prev_pd_, z );
+  //AjFilterCollection::filterObservations( filter_type_, prev_pn_, x );
+  //AjFilterCollection::filterObservations( filter_type_, prev_pe_, y );
+  //AjFilterCollection::filterObservations( filter_type_, prev_pd_, z );
+  pose_filter_.filterObservations( prev_pn_, prev_pe_, prev_pd_, x, y, z );
 
   /* positions */
   state_vector_[0] = x;
@@ -98,9 +107,10 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   prev_ve_.push_back( vy );
   prev_vd_.erase( prev_vd_.begin() );
   prev_vd_.push_back( vz );
-  AjFilterCollection::filterObservations( filter_type_, prev_vn_, vx );
-  AjFilterCollection::filterObservations( filter_type_, prev_ve_, vy );
-  AjFilterCollection::filterObservations( filter_type_, prev_vd_, vz );
+  //AjFilterCollection::filterObservations( filter_type_, prev_vn_, vx );
+  //AjFilterCollection::filterObservations( filter_type_, prev_ve_, vy );
+  //AjFilterCollection::filterObservations( filter_type_, prev_vd_, vz );
+  rate_filter_.filterObservations( prev_vn_, prev_ve_, prev_vd_, vx, vy, vz );
   state_vector_[3] = vx;
   state_vector_[4] = vy;
   state_vector_[5] = vz;

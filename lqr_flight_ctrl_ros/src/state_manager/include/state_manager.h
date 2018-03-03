@@ -14,6 +14,7 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <state_manager/CurrentState.h>
 #include <asctec_handler/AsctecData.h>
+#include "aj_filter_collection.cpp"
 #if __USE_VICON
 #include <tf/tf.h>
 #endif
@@ -56,6 +57,8 @@ class StateManager
   /* Filter-specific details for computing velocity */
   int filter_len_;
   std::string filter_type_;
+  AjFilterCollection pose_filter_;
+  AjFilterCollection rate_filter_;
   
   double home_lat_, home_lon_;
   bool have_location_fix_;
