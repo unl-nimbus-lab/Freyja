@@ -6,6 +6,7 @@
 #include <ros/ros.h>
 #include <vector>
 #include <algorithm>
+#include <numeric>
 #include <static_sort.h>
 
 const int MEDIAN_FILTER_LEN = 13;
@@ -124,11 +125,14 @@ AjFilterCollection::AjFilterCollection( const int& len, const std::string &f_nam
                                         const std::string &f_type,
                                         const std::vector<double> coeffs = {0} )
 {
+  bool filter_initialised = false;
+  
   /* Check for the name and the type */
   if( f_name == "lwma" )
   {
       initLwmaFilter( f_type, len );
       using_conv_filters_ = true;
+      filter_initialised = true;
   }
       
   if( f_name == "gauss" )
@@ -146,21 +150,30 @@ AjFilterCollection::AjFilterCollection( const int& len, const std::string &f_nam
     }
     else
       initGaussianFilter( coeffs, len );
+    
     using_conv_filters_ = true;
+    filter_initialised = true;
    }
       
   if( f_name == "woltring" )
   {
     /* @TODO: implement this if you can */
     ROS_ERROR( "Woltring filter not implemented in this function call!" );
+    AjFilterCollection( -1, "median", "~" );
+    
     using_conv_filters_ = false;
+    filter_initialised = true;
   }
       
   if( f_name == "median" )
   {
     initMedianFilter( );
     using_conv_filters_ = false;
+    filter_initialised = true;
   }
+  
+  if( !filter_initialised )
+    ROS_ERROR( "Filter not initialized: %s", f_name.c_str() );
 }
 
 void AjFilterCollection::filterObservations( const std::vector<double> &obs,
