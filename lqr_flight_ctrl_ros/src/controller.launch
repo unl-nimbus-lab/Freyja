@@ -4,8 +4,11 @@
     <param name="vicon_object" type="string" value="/vicon/ARGENTINA/ARGENTINA" />
   </node>
   
-  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" >
+  <!--node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" >
     <param name="controller_rate" value="50" type="int" />
+  </node-->
+  <node name="lqr_vel_controller" pkg=lqr_vel_ctrl" type="lqr_vel_ctrl_node" >
+    <param name="controller_rate" value="100" type="int" />
   </node>
   
   <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" output="screen" >
