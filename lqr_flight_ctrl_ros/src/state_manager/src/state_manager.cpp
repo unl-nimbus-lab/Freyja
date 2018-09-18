@@ -45,14 +45,15 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   {
     /* The init function automatically fills in the coeffs for lwma */
     filter_len_ = 20;
-    pose_filter_ = AjFilterCollection( filter_len_, "lwma", "squared" );
-    rate_filter_ = AjFilterCollection( filter_len_, "lwma", "squared" );
+    pose_filter_ = AjFilterCollection( filter_len_, "lwma", "cubic" );
+    rate_filter_ = AjFilterCollection( filter_len_, "lwma", "cubic" );
     ROS_INFO( "LWMA filter init!" );
   }
   else if( filter_type_ == "median" )
   {
     pose_filter_ = AjFilterCollection( -1, "median", "~" );
     rate_filter_ = AjFilterCollection( -1, "median", "~" );
+    filter_len_ = pose_filter_.getCurrentFilterLen();
   }
   prev_pn_.resize( filter_len_ );
   prev_pe_.resize( filter_len_ );

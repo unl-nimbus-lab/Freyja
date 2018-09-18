@@ -106,7 +106,7 @@ class AjFilterCollection
                         const std::vector<double> );
     //AjFilterCollection( const int&, const std::string&, const std::vector<double>& );
 
-    
+    int getCurrentFilterLen();
     void filterObservations( const std::vector<double> &obs, double &retVal );
     void filterObservations( const std::vector<double> &obs1, 
                                              const std::vector<double> &obs2, 
@@ -154,7 +154,7 @@ AjFilterCollection::AjFilterCollection( const int& len, const std::string &f_nam
     using_conv_filters_ = true;
     filter_initialised = true;
    }
-      
+
   if( f_name == "woltring" )
   {
     /* @TODO: implement this if you can */
@@ -164,7 +164,7 @@ AjFilterCollection::AjFilterCollection( const int& len, const std::string &f_nam
     using_conv_filters_ = false;
     filter_initialised = true;
   }
-      
+
   if( f_name == "median" )
   {
     initMedianFilter( );
@@ -253,5 +253,10 @@ void AjFilterCollection::filterObservations( const std::vector<double> &obs1,
     sorter_instance_( unsorted_temp );
     retVal3 = unsorted_temp[ MEDIAN_IDX ];
   }
+}
+
+int AjFilterCollection::getCurrentFilterLen()
+{
+  return filter_len_;
 }
 #endif
