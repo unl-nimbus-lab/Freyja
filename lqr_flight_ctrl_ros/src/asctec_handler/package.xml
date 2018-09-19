@@ -40,13 +40,12 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>lqr_control</build_depend>
+  <build_depend>common_msgs</build_depend>
   <build_depend>roscpp</build_depend>
-  <build_depend>state_manager</build_depend>
   <build_depend>std_msgs</build_depend>
-  <run_depend>lqr_control</run_depend>
+  
+
   <run_depend>roscpp</run_depend>
-  <run_depend>state_manager</run_depend>
   <run_depend>std_msgs</run_depend>
 
 

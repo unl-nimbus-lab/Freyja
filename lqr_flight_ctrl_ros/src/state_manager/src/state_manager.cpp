@@ -26,7 +26,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   #endif
 
   /* Announce state publisher */
-  state_pub_ = nh_.advertise <state_manager::CurrentState>
+  state_pub_ = nh_.advertise <common_msgs::CurrentState>
                   ( "current_state", 1, true ); 
 
   if( filter_type_ == "gauss" )
@@ -146,14 +146,14 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   last_yaw_ = yaw;
   
   /* Copy over and publish right away */
-  state_manager::CurrentState state_msg;
+  common_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];
   state_pub_.publish( state_msg );
 }
 #else
-void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPtr &msg )
+void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &msg )
 {
   double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
   double x, y, z;
@@ -216,7 +216,7 @@ void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPt
   last_pd_ = state_vector_[2];
   
   /* Copy over and publish right away */
-  state_manager::CurrentState state_msg;
+  common_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];

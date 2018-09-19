@@ -25,7 +25,7 @@ AsctecHandler::AsctecHandler( const std::string &p, const int b )
   write_buffer_.clear();
   write_buffer_.resize( PRY_PKT_LEN );
 
-  asctec_pub_ = nh_.advertise <asctec_handler::AsctecData>
+  asctec_pub_ = nh_.advertise <common_msgs::AsctecData>
                                           ( "/asctec_onboard_data", 1, true );
   read_decode_timer_ = nh_.createWallTimer( ros::WallDuration(0.0008),
                             &AsctecHandler::readAndDecodePackets, this );
@@ -60,7 +60,7 @@ void AsctecHandler::limitLqrCommands( float &r, float &p, float &y, float &t )
   t /= 5.0;
 }
 
-void AsctecHandler::rpytCommandCallback( const lqr_control::CtrlCommand::ConstPtr &msg )
+void AsctecHandler::rpytCommandCallback( const common_msgs::CtrlCommand::ConstPtr &msg )
 {
   /* handle the message and reshape it for asctec vehicles and then publish it
       to a topic that is then consumed by the serial interface node. */
@@ -143,7 +143,7 @@ void AsctecHandler::FormCmdPacketForLLP( int16_t pitch, int16_t roll, int16_t ya
 }
 
 
-void AsctecHandler::motorHandlerCallback( const asctec_handler::MotorCommand::ConstPtr &msg )
+void AsctecHandler::motorHandlerCallback( const common_msgs::MotorCommand::ConstPtr &msg )
 {
   /* check what is it that we want to do with the motors, and then send it to a
   topic that the serial interface node can then consume.

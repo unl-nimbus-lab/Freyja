@@ -15,11 +15,11 @@ Screw it, this node handles serial interface as well!
 #include <signal.h>
 #include <thread>
 #include <ros/ros.h>
-#include <lqr_control/CtrlCommand.h>
-#include <state_manager/CurrentState.h>
+#include <common_msgs/CtrlCommand.h>
+#include <common_msgs/CurrentState.h>
 
-#include <asctec_handler/MotorCommand.h>
-#include <asctec_handler/AsctecData.h>
+#include <common_msgs/MotorCommand.h>
+#include <common_msgs/AsctecData.h>
 
 #include "aj_serial_interface.h"
 #include "aj_packet_format.h"
@@ -39,7 +39,7 @@ class AsctecHandler : public AjSerialInterface
   ros::NodeHandle nh_;
   
   int vehicle_state_;
-  asctec_handler::AsctecData vehicle_data_;
+  common_msgs::AsctecData vehicle_data_;
   
   public:
     AsctecHandler( const std::string&, const int );
@@ -53,10 +53,10 @@ class AsctecHandler : public AjSerialInterface
     ros::Publisher asctec_command_pub_;
     
     ros::Subscriber rpyt_cmd_sub_;
-    void rpytCommandCallback( const lqr_control::CtrlCommand::ConstPtr & );
+    void rpytCommandCallback( const common_msgs::CtrlCommand::ConstPtr & );
     
     ros::Subscriber motor_handler_sub_;
-    void motorHandlerCallback( const asctec_handler::MotorCommand::ConstPtr & );
+    void motorHandlerCallback( const common_msgs::MotorCommand::ConstPtr & );
     
     void turnMotorsOn();
     void turnMotorsOff();

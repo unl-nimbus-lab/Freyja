@@ -5,28 +5,10 @@ project(asctec_handler)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  lqr_control
+  common_msgs
   roscpp
-  state_manager
   std_msgs
 )
-
-
-## Generate messages in the 'msg' folder
-add_message_files(
-   FILES
-   AsctecCommand.msg
-   MotorCommand.msg
-   AsctecData.msg
-)
-
-## Generate added messages and services with any dependencies listed here
-generate_messages(
-   DEPENDENCIES
-   std_msgs
- )
-
-
 
 ###################################
 ## catkin specific configuration ##
@@ -40,7 +22,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES nimbus_serial
-  CATKIN_DEPENDS lqr_control roscpp state_manager std_msgs #nimbus_serial
+  CATKIN_DEPENDS roscpp std_msgs #nimbus_serial
 #  DEPENDS system_lib
 )
 

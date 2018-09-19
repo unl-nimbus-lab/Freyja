@@ -30,9 +30,9 @@ LQRController::LQRController() : nh_("~")
                               &LQRController::trajectoryReferenceCallback, this );
                               
   /* Announce publisher for controller output */
-  atti_cmd_pub_ = nh_.advertise <lqr_control::CtrlCommand>
+  atti_cmd_pub_ = nh_.advertise <common_msgs::CtrlCommand>
                     ( "/rpyt_command", 1, true );
-  controller_debug_pub_ = nh_.advertise <lqr_control::ControllerDebug>
+  controller_debug_pub_ = nh_.advertise <common_msgs::ControllerDebug>
                     ( "controller_debug", 1, true );
                     
   /* Timer to run the LQR controller perdiodically */
@@ -58,7 +58,7 @@ void LQRController::initLqrSystem()
             0.0, 0.0, 0.0, 1.0;
 }
 
-void LQRController::stateCallback( const state_manager::CurrentState::ConstPtr &msg )
+void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &msg )
 {
   /* Parse message to obtain state and reduced state information */
   //std::vector<double> sv(13);
@@ -119,7 +119,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   float yaw = control_input(3);
   
   /* Debug information */
-  lqr_control::ControllerDebug debug_msg;
+  common_msgs::ControllerDebug debug_msg;
   debug_msg.header.stamp = ros::Time::now();
   debug_msg.lqr_u[0] = control_input(0);
   debug_msg.lqr_u[1] = control_input(1);
@@ -132,7 +132,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   controller_debug_pub_.publish( debug_msg );
   
   /* Actual commanded input */
-  lqr_control::CtrlCommand ctrl_cmd;
+  common_msgs::CtrlCommand ctrl_cmd;
   ctrl_cmd.roll = roll;
   ctrl_cmd.pitch = pitch;
   ctrl_cmd.yaw = yaw;

@@ -9,27 +9,15 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
 #  message_runtime
   roscpp
-  state_manager
+  common_msgs
   std_msgs
 )
-
-## Generate messages in the 'msg' folder
-add_message_files(
-   FILES
-   ReferenceState.msg
- )
-
-## Generate added messages and services with any dependencies listed here
-generate_messages(
-   DEPENDENCIES
-   std_msgs
- )
 
 
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES trajectory_provider
-  CATKIN_DEPENDS geometry_msgs message_generation message_runtime roscpp state_manager std_msgs
+  CATKIN_DEPENDS geometry_msgs message_generation message_runtime roscpp std_msgs
 #  DEPENDS system_lib
 )
 

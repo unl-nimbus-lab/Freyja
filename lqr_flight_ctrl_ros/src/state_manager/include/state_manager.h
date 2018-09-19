@@ -12,8 +12,8 @@
 #define __USE_VICON 1
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
-#include <state_manager/CurrentState.h>
-#include <asctec_handler/AsctecData.h>
+#include <common_msgs/CurrentState.h>
+#include <common_msgs/AsctecData.h>
 #include "aj_filter_collection.cpp"
 #if __USE_VICON
 #include <tf/tf.h>
@@ -72,7 +72,7 @@ class StateManager
     #else
     /* Callback handler for asctec_onboard_data */
     ros::Subscriber asctec_data_sub_;
-    void asctecDataCallback( const asctec_handler::AsctecData::ConstPtr & );
+    void asctecDataCallback( const common_msgs::AsctecData::ConstPtr & );
     #endif
     /* Publisher for state information */
     ros::Publisher state_pub_;

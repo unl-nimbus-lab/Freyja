@@ -7,8 +7,7 @@ set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3" )
 find_package(catkin REQUIRED COMPONENTS
   message_generation
   roscpp
-  state_manager
-  trajectory_provider
+  common_msgs
   cmake_modules
 )
 #pkg_search_module( Eigen3 REQUIRED eigen3 )
@@ -26,23 +25,11 @@ else()
   set( EIGEN3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR} )
 endif()
 
-## Generate messages in the 'msg' folder
-add_message_files(
-    FILES
-    CtrlCommand.msg
-    ControllerDebug.msg
-)
-
-## Generate added messages and services with any dependencies listed here
-generate_messages(
-   DEPENDENCIES
-   std_msgs
- )
 
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES lqr_control
-  CATKIN_DEPENDS Eigen3 message_generation roscpp state_manager
+  CATKIN_DEPENDS Eigen3 message_generation roscpp
   DEPENDS Eigen
 )
 
@@ -57,7 +44,7 @@ include_directories(
 )
 
 add_executable(lqr_vel_ctrl_node src/lqr_control.cpp)
-add_dependencies(lqr_control_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(lqr_vel_ctrl_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(lqr_vel_ctrl_node
    ${catkin_LIBRARIES}
  )

@@ -10,10 +10,10 @@
 #include <cmath>
 #include <ros/ros.h>
 #include <std_msgs/UInt8.h>
-#include <trajectory_provider/ReferenceState.h>
+#include <common_msgs/ReferenceState.h>
 
 #define ROS_NODE_NAME "trajectory_provider"
-typedef trajectory_provider::ReferenceState TrajRef;
+typedef common_msgs::ReferenceState TrajRef;
 
 // global decl for "start time". This can be reset by a callback
 ros::Time init_time;

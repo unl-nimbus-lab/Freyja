@@ -16,10 +16,10 @@
 
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
-#include <state_manager/CurrentState.h>
-#include <lqr_control/CtrlCommand.h>
-#include <lqr_control/ControllerDebug.h>
-#include <trajectory_provider/ReferenceState.h>
+#include <common_msgs/state_manager/CurrentState.h>
+#include <common_msgs/lqr_control/CtrlCommand.h>
+#include <common_msgs/lqr_control/ControllerDebug.h>
+#include <common_msgs/trajectory_provider/ReferenceState.h>
 #include <eigen3/Eigen/Dense>
 
 typedef trajectory_provider::ReferenceState TrajRef;
