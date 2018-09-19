@@ -9,10 +9,23 @@
 */
 #include <cmath>
 #include <ros/ros.h>
+#include <std_msgs/UInt8.h>
 #include <trajectory_provider/ReferenceState.h>
 
 #define ROS_NODE_NAME "trajectory_provider"
 typedef trajectory_provider::ReferenceState TrajRef;
+
+// global decl for "start time". This can be reset by a callback
+ros::Time init_time;
+
+void timeResetCallback( const std_msgs::UInt8::ConstPtr &msg )
+{
+  if( msg -> data == 1 )
+  {
+    init_time = ros::Time::now();
+    ROS_WARN( "%s: Time reset requested!", ROS_NODE_NAME );
+  }
+}
 
 // HOVER AT A POINT 
 TrajRef getCurrentReference( const ros::Duration &cur_time )
@@ -197,10 +210,14 @@ int main( int argc, char** argv )
   /* Publisher for trajectory */
   ros::Publisher traj_pub;
   traj_pub = nh.advertise <TrajRef> ( "/reference_state", 1, true );
+  
+  /* Create subscriber for resetting time -- restart the trajectory */
+  ros::Subscriber time_reset_sub;
+  time_reset_sub = nh.subscribe( "/reset_trajectory_time", 1, timeResetCallback );
 
   /* How fast should a trajectory update be made? */
   ros::Rate update_rate(50);
-  ros::Time init_time = ros::Time::now();
+  init_time = ros::Time::now();
 
   while( ros::ok() )
   {
