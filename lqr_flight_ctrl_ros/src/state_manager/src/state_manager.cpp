@@ -172,6 +172,7 @@ void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPt
   y = ( (msg->best_lon)/10000000.0 - home_lon_ )*84356.28;
   z = -(msg -> hgt)/1000.0;
   
+  /*
   prev_pn_.erase( prev_pn_.begin() );
   prev_pn_.push_back( x );
   prev_pe_.erase( prev_pe_.begin() );
@@ -182,7 +183,7 @@ void StateManager::asctecDataCallback( const asctec_handler::AsctecData::ConstPt
   AjFilterCollection::filterObservations( "gauss", prev_pn_, x );
   AjFilterCollection::filterObservations( "gauss", prev_pe_, y );
   AjFilterCollection::filterObservations( "gauss", prev_pd_, z );
-//  ROS_INFO("%0.3f", x);
+  */
   /* positions */
   state_vector_[0] = x;
   state_vector_[1] = y;

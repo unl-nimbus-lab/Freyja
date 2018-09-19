@@ -1,6 +1,8 @@
 #include "asctec_handler.h"
 
 #define ROS_NODE_NAME "asctec_handler"
+#define __USING_DUAL_RADIO 0
+
 AsctecHandler::AsctecHandler( const std::string &p, const int b )
                     : AjSerialInterface( p, b ), nh_()
 {
@@ -93,25 +95,26 @@ void AsctecHandler::rpytCommandCallback( const lqr_control::CtrlCommand::ConstPt
   yaw = std::max( YAW_MIN, std::min( YAW_MAX, yaw ) );
   thrust = std::max( THRUST_MIN, std::min( THRUST_MAX, thrust ) );
   
-  /* put into the write buffer */
-  write_buffer_.clear();
-  write_buffer_.resize(17);
-  FormCmdPacketForLLP( pitch, roll, yaw, thrust, ctrl_bits );
-  /*
-  write_buffer_.resize( PRY_PKT_LEN );
-  LibNimbusSerial::pack8( PRY_HEADER_VAL, PRY_HEADER_IDX, write_buffer_ );
-  LibNimbusSerial::pack16( pitch, PRY_PITCH_LOW, write_buffer_ );
-  LibNimbusSerial::pack16( roll, PRY_ROLL_LOW, write_buffer_ );
-  LibNimbusSerial::pack16( yaw, PRY_YAW_LOW, write_buffer_ );
-  LibNimbusSerial::pack16( thrust, PRY_THRUST_LOW, write_buffer_ );
-  LibNimbusSerial::pack8( ctrl_bits, PRY_CTRL, write_buffer_ );
+  #if __USING_DUAL_RADIO
+    /* put into the write buffer */
+    write_buffer_.clear();
+    write_buffer_.resize(17);
+    FormCmdPacketForLLP( pitch, roll, yaw, thrust, ctrl_bits );
+  #else
+    write_buffer_.resize( PRY_PKT_LEN );
+    LibNimbusSerial::pack8( PRY_HEADER_VAL, PRY_HEADER_IDX, write_buffer_ );
+    LibNimbusSerial::pack16( pitch, PRY_PITCH_LOW, write_buffer_ );
+    LibNimbusSerial::pack16( roll, PRY_ROLL_LOW, write_buffer_ );
+    LibNimbusSerial::pack16( yaw, PRY_YAW_LOW, write_buffer_ );
+    LibNimbusSerial::pack16( thrust, PRY_THRUST_LOW, write_buffer_ );
+    LibNimbusSerial::pack8( ctrl_bits, PRY_CTRL, write_buffer_ );
   
-  uint16_t crc = LibNimbusSerial::calcCrc16( write_buffer_, PRY_CRC_HIGH );
-  LibNimbusSerial::pack16( crc, PRY_CRC_LOW, write_buffer_ );
-  
+    uint16_t crc = LibNimbusSerial::calcCrc16( write_buffer_, PRY_CRC_HIGH );
+    LibNimbusSerial::pack16( crc, PRY_CRC_LOW, write_buffer_ );
+  #endif
   //ROS_ASSERT( write_buffer_.size() < PRY_PKT_LEN );
   //ROS_WARN( "writing [rpyt]: %d, %d, %d, %d", roll, pitch, yaw, thrust );
-  */
+  
   writeCommandPacket();
   
 }
