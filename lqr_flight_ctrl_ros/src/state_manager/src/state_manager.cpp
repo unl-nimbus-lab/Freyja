@@ -156,7 +156,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
 void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &msg )
 {
   double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
-  double x, y, z;
+  double x, y, z, vx, vy, vz;
   
   if( (msg -> motor1rpm) > 0 && !have_location_fix_ )
   {
@@ -172,14 +172,17 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
   y = ( (msg->best_lon)/10000000.0 - home_lon_ )*84356.28;
   z = -(msg -> hgt)/1000.0;
   
+  vx = (msg -> best_sp_x)/1000.0;
+  vy = (msg -> best_sp_y)/1000.0;
+  vz = (msg -> best_sp_z)/1000.0;
+  prev_vn_.erase( prev_vn_.begin() );
+  prev_vn_.push_back( vx );
+  prev_ve_.erase( prev_ve_.begin() );
+  prev_ve_.push_back( vy );
+  prev_vd_.erase( prev_vd_.begin() );
+  prev_vd_.push_back( vz );
+  rate_filter_.filterObservations( prev_vn_, prev_ve_, prev_vd_, vx, vy, vz );
   /*
-  prev_pn_.erase( prev_pn_.begin() );
-  prev_pn_.push_back( x );
-  prev_pe_.erase( prev_pe_.begin() );
-  prev_pe_.push_back( y );
-  prev_pd_.erase( prev_pd_.begin() );
-  prev_pd_.push_back( z );
-  
   AjFilterCollection::filterObservations( "gauss", prev_pn_, x );
   AjFilterCollection::filterObservations( "gauss", prev_pe_, y );
   AjFilterCollection::filterObservations( "gauss", prev_pd_, z );
@@ -190,9 +193,9 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
   state_vector_[2] = z;
   
   /* velocities from vehicle */
-  state_vector_[3] = (msg -> best_sp_x)/1000.0;
-  state_vector_[4] = (msg -> best_sp_y)/1000.0;
-  state_vector_[5] = (msg -> best_sp_z)/1000.0;
+  state_vector_[3] = vx; //(msg -> best_sp_x)/1000.0;
+  state_vector_[4] = vy; //(msg -> best_sp_y)/1000.0;
+  state_vector_[5] = vz; //(msg -> best_sp_z)/1000.0;
   
   /* Attitude */
   state_vector_[6] = (msg -> roll_angle)/1000.0;

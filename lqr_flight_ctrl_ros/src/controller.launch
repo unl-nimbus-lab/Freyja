@@ -1,6 +1,6 @@
 <launch>
   <node name="state_manager" pkg="state_manager" type="state_manager_node" output="screen" >
-    <param name="filter_type" type="string" value="median" />
+    <param name="filter_type" type="string" value="gauss" />
     <param name="vicon_object" type="string" value="/vicon/ARGENTINA/ARGENTINA" />
   </node>
   

@@ -239,6 +239,9 @@ void AsctecHandler::readAndDecodePackets( const ros::WallTimerEvent& event )
   std::vector <uint8_t> local_buffer;
   if( AjSerialInterface::getPossiblePacket( local_buffer, int(PKT_LEN) ) )
   {
+//    for( auto c : local_buffer )
+//      std::cout << (int)c << " ";
+//    std::cout << std::endl;
     /* check if there is a matching header */
     if( local_buffer.front() == PKT_HEADER_FLAG )
     {
@@ -246,13 +249,14 @@ void AsctecHandler::readAndDecodePackets( const ros::WallTimerEvent& event )
           ..which means it should have a valid checksum, right? */
       uint16_t calc_crc = LibNimbusSerial::calcCrc16( local_buffer, PKT_CHKSUM_IDX_1 );
       uint16_t buf_crc = LibNimbusSerial::unpack16( local_buffer, PKT_CHKSUM_IDX_0 );
-
+      std::cout << calc_crc << ", " << buf_crc << std::endl;
       if( calc_crc == buf_crc )
       {
         /* Awesome, we have a totally valid packet now! Let's decode it! */
         decodePacket( local_buffer );
         /* Remove it from the running buffer */
         removeOnePacketLen( PKT_LEN );
+        
       }
       else
       {
