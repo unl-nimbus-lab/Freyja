@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   common_msgs
   roscpp
   std_msgs
+  message_generation
 )
 
 ###################################
