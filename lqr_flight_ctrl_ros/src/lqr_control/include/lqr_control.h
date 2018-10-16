@@ -22,13 +22,13 @@
 #include <common_msgs/ReferenceState.h>
 #include <eigen3/Eigen/Dense>
 
-typedef trajectory_provider::ReferenceState TrajRef;
+typedef common_msgs::ReferenceState TrajRef;
 
 
 class LQRController
 {
   ros::NodeHandle nh_;
-  state_manager::CurrentState state_vector_;
+  common_msgs::CurrentState state_vector_;
   Eigen::Matrix<double, 7, 1> reduced_state_;
   
   /* Reference state vector */
@@ -58,7 +58,7 @@ class LQRController
     void initLqrSystem();
     
     ros::Subscriber state_sub_;
-    void stateCallback( const state_manager::CurrentState::ConstPtr & );
+    void stateCallback( const common_msgs::CurrentState::ConstPtr & );
     
     ros::Publisher atti_cmd_pub_;
     ros::Publisher controller_debug_pub_;
