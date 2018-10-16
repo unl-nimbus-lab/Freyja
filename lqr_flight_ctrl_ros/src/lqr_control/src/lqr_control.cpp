@@ -32,7 +32,7 @@ LQRController::LQRController() : nh_()
   /* Announce publisher for controller output */
   atti_cmd_pub_ = nh_.advertise <common_msgs::CtrlCommand>
                     ( "/rpyt_command", 1, true );
-  controller_debug_pub_ = nh_.advertise <common_msgsl::ControllerDebug>
+  controller_debug_pub_ = nh_.advertise <common_msgs::ControllerDebug>
                     ( "controller_debug", 1, true );
                     
   /* Timer to run the LQR controller perdiodically */
