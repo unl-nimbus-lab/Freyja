@@ -5,6 +5,7 @@
 #define ROS_NODE_NAME "state_manager"
 
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
+#define AJ_PI 3.14153
 StateManager::StateManager() : nh_(), priv_nh_("~")
 {
   state_vector_.resize( STATE_VECTOR_LEN );
@@ -172,9 +173,9 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
   y = ( (msg->best_lon)/10000000.0 - home_lon_ )*84356.28;
   z = -(msg -> hgt)/1000.0;
   
-  vx = (msg -> best_sp_x)/1000.0;
-  vy = (msg -> best_sp_y)/1000.0;
-  vz = (msg -> best_sp_z)/1000.0;
+  vy = (msg -> best_sp_x)/1000.0;
+  vx = (msg -> best_sp_y)/1000.0;
+  vz = -(msg -> best_sp_z)/1000.0;
   prev_vn_.erase( prev_vn_.begin() );
   prev_vn_.push_back( vx );
   prev_ve_.erase( prev_ve_.begin() );
@@ -200,7 +201,8 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
   /* Attitude */
   state_vector_[6] = (msg -> roll_angle)/1000.0;
   state_vector_[7] = (msg -> pitch_angle)/1000.0;
-  state_vector_[8] = DEG2RAD( (msg -> yaw_angle)/1000.0 );
+  double yaw_c = DEG2RAD( (msg -> yaw_angle)/1000.0 );
+  state_vector_[8] = ( yaw_c > AJ_PI )? yaw_c - 2*AJ_PI : yaw_c;
   
   /* rpy rates */
   state_vector_[9] = 0.0;

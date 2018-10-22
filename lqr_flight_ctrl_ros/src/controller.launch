@@ -9,7 +9,7 @@
   </node-->
   <node name="lqr_vel_controller" pkg="lqr_vel_ctrl" type="lqr_vel_ctrl_node" >
     <param name="controller_rate" value="50" type="int" />
-    <param name="total_mass" value="0.58" type="double" />
+    <param name="total_mass" value="0.6" type="double" />
   </node>
   
   <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" >

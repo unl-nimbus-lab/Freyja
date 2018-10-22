@@ -13,7 +13,7 @@
 #define ROS_NODE_NAME "lqr_vel_ctrl"
 LQRController::LQRController() : nh_("~")
 {
-  int controller_rate_default = 150;
+  int controller_rate_default = 50;
   nh_.param( "controller_rate", controller_rate_, controller_rate_default );
   
   float mass_default = 0.55;
@@ -52,10 +52,16 @@ void LQRController::initLqrSystem()
     lqr_Q_ = [..];  (4x4)
     lqr_R_ = [..];  (4x4)
   */
+  /*
   lqr_K_ << 3.1623, 0.0, 0.0, 0.0,
             0.0, 3.1623, 0.0, 0.00,
             0.0, 0.0, 3.1623, 0.0,    // 4.4721
             0.0, 0.0, 0.0, 1.0;
+  */
+  lqr_K_ << 2.2361, 0.0, 0.0, 0.0,
+            0.0, 2.2361, 0.0, 0.0,
+            0.0, 0.0, 1.5811, 0.0,
+            0.0, 0.0, 0.0, 1.0000;
 }
 
 void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &msg )
