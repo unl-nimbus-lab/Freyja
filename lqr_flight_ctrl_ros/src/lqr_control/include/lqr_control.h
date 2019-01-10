@@ -27,7 +27,7 @@ typedef common_msgs::ReferenceState TrajRef;
 
 class LQRController
 {
-  ros::NodeHandle nh_;
+  ros::NodeHandle nh_, priv_nh_;
   common_msgs::CurrentState state_vector_;
   Eigen::Matrix<double, 7, 1> reduced_state_;
   
@@ -68,4 +68,7 @@ class LQRController
     
     ros::Subscriber reference_sub_;
     void trajectoryReferenceCallback( const TrajRef::ConstPtr & );
+
+    /* helper function to calculate yaw error */
+    inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
 };

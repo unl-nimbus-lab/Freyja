@@ -9,14 +9,13 @@
 #ifndef __STATE_INFO_GENERATOR_H__
 #define __STATE_INFO_GENERATOR_H__
 
-#define __USE_VICON 0
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <common_msgs/CurrentState.h>
 #include <common_msgs/AsctecData.h>
 #include "aj_filter_collection.cpp"
-#if __USE_VICON
-#include <tf/tf.h>
+#if USE_VICON_ == 1
+  #include <tf/tf.h>
 #endif
 
 typedef geometry_msgs::TransformStamped TFStamped;
@@ -65,10 +64,10 @@ class StateManager
   
   public:
     StateManager();
-    #if __USE_VICON
+    #if USE_VICON_ == 1
     /* Callback handler for Vicon */
     ros::Subscriber vicon_data_sub_;
-    void viconCallback( const TFStamped::ConstPtr & );
+    void viconCallback( const TFStamped::ConstPtr & ) __attribute__((hot));
     #else
     /* Callback handler for asctec_onboard_data */
     ros::Subscriber asctec_data_sub_;
@@ -79,5 +78,6 @@ class StateManager
     
     /* Compute velocity */
     void computeVelocity( float&, float&, float&, float& );
+
 };
 #endif

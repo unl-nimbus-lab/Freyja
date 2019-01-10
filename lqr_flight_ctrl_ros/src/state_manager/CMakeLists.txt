@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(state_manager)
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O4" )
+set( USINGVICON 1 )
+set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -DUSE_VICON_=${USINGVICON}" )
 
 find_package(catkin REQUIRED COMPONENTS
   message_generation

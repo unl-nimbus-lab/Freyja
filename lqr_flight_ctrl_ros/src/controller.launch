@@ -1,22 +1,28 @@
 <launch>
+	<!-- vim: set ft=xml noet : -->
+	<arg name="use_vel_only" default="false"/>
+	
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
-    <param name="filter_type" type="string" value="gauss" />
-    <param name="vicon_object" type="string" value="/vicon/ARGENTINA/ARGENTINA" />
+    <param name="filter_type" type="string" value="median" />
+    <param name="vicon_object" type="string" value="/vicon/FW_LASER/FW_LASER" />
   </node>
   
-  <!--node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" >
-    <param name="controller_rate" value="50" type="int" />
-  </node-->
-  <node name="lqr_vel_controller" pkg="lqr_vel_ctrl" type="lqr_vel_ctrl_node" >
-    <param name="controller_rate" value="50" type="int" />
-    <param name="total_mass" value="0.6" type="double" />
+  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" if="$(eval not use_vel_only)">
+		<param name="controller_rate" value="40" type="int" />
+  	<param name="total_mass" value="0.95" type="double" />
   </node>
   
-  <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" >
+  <node name="lqr_vel_controller" pkg="lqr_vel_ctrl" type="lqr_vel_ctrl_node" if="$(eval use_vel_only)">
+    <param name="controller_rate" value="30" type="int" />
+    <param name="total_mass" value="0.95" type="double" />
+  </node>
+  
+  <!--node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" >
     <param name="serial_port" value="/dev/ttyUSB0" />
-  </node>
+  </node-->
+  <node name="apm_handler" pkg="apm_handler" type="apm_handler_node" />
   
   <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node"/>
   
-  <node name="recorder" pkg="rosbag" type="record" args="-a" />
+  <!--node name="recorder" pkg="rosbag" type="record" args="-a" /-->
 </launch>

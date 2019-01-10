@@ -11,13 +11,15 @@
 #include "lqr_control.h"
 
 #define ROS_NODE_NAME "lqr_control"
-LQRController::LQRController() : nh_()
+#define pi 3.1416
+
+LQRController::LQRController() : nh_(), priv_nh_("~")
 {
-  int controller_rate_default = 150;
-  nh_.param( "controller_rate", controller_rate_, controller_rate_default );
+  int controller_rate_default = 30;
+  priv_nh_.param( "controller_rate", controller_rate_, controller_rate_default );
   
-  float mass_default = 0.55;
-  nh_.param( "total_mass", total_mass_, mass_default );
+  float mass_default = 0.85;
+  priv_nh_.param( "total_mass", total_mass_, mass_default );
   
   /* initialise system params, matrices and controller configuration */
   initLqrSystem();
@@ -58,6 +60,13 @@ void LQRController::initLqrSystem()
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
 }
 
+double LQRController::calcYawError( const double &a, const double &b )
+{
+  double yd = fmod( a - b + pi, 2*pi );
+  yd = yd < 0 ? yd+=2*pi : yd;
+  return yd-pi; 
+}
+
 void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &msg )
 {
   /* Parse message to obtain state and reduced state information */
@@ -77,9 +86,14 @@ void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &ms
   reduced_state_ << temp.head<6>() , double(yaw);
   have_state_update_ = true;
   
+  /* compute x - xr right here */
   std::unique_lock<std::mutex> rsmtx( reference_state_mutex_, std::defer_lock );
   if( have_reference_update_ && rsmtx.try_lock() )
-    reduced_state_ -= reference_state_;
+  {
+    reduced_state_.head<6>() -= reference_state_.head<6>();
+    /* yaw-error is done differently */
+    reduced_state_(6) = calcYawError( reduced_state_(6), reference_state_(6) );
+  }  
 }
 
 void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )

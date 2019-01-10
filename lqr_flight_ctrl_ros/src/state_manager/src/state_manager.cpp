@@ -14,7 +14,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   priv_nh_.param( "vicon_object", vicon_topic, vicon_topic );
   priv_nh_.param( "filter_type", filter_type_, std::string("lwma") );
   priv_nh_.param( "filter_length", filter_len_, int(21) );
-  #if __USE_VICON
+  #if USE_VICON_ == 1
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
                                     &StateManager::viconCallback, this );
@@ -66,7 +66,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   lastUpdateTime_ = ros::Time::now();
   have_location_fix_ = false;
 }
-#if __USE_VICON
+#if USE_VICON_ == 1
 void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
 {
   /* Handle most of the state information directly, except for velocity
