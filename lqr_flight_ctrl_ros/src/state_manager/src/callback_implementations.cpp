@@ -187,6 +187,8 @@ void StateManager::mavrosGpsVelCallback( const TwStamped::ConstPtr &msg )
   state_vector_[4] = msg -> twist.linear.y;
   state_vector_[5] = msg -> twist.linear.z;
   
+  state_vector_[12] = time_since;
+  
   lastUpdateTime_ = ros::Time::now();
 
   common_msgs::CurrentState state_msg;

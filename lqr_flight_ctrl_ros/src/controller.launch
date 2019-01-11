@@ -1,28 +1,36 @@
 <launch>
 	<!-- vim: set ft=xml noet : -->
-	<arg name="use_vel_only" default="false"/>
+
+	<!-- allowed autopilots: "asctec" or "arducopter" -->
+	<arg name="autopilot" default="asctec"/>
+	<arg name="use_velctrl_only" default="false"/>
 	
+	<!-- state source can be: "apm", "asctec" or "vicon" -->
+	<!-- implemented filters: "median", "gauss" and "lwma" -->
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
+    <param name="state_source" type="string" value="apm" />
     <param name="filter_type" type="string" value="median" />
     <param name="vicon_object" type="string" value="/vicon/FW_LASER/FW_LASER" />
   </node>
+
+  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node"/>
   
-  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" if="$(eval not use_vel_only)">
+  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" if="$(eval not use_velctrl_only)">
 		<param name="controller_rate" value="40" type="int" />
   	<param name="total_mass" value="0.95" type="double" />
   </node>
   
-  <node name="lqr_vel_controller" pkg="lqr_vel_ctrl" type="lqr_vel_ctrl_node" if="$(eval use_vel_only)">
+  <node name="lqr_vel_controller" pkg="lqr_vel_ctrl" type="lqr_vel_ctrl_node" if="$(eval use_velctrl_only)">
     <param name="controller_rate" value="30" type="int" />
     <param name="total_mass" value="0.95" type="double" />
   </node>
   
-  <!--node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" >
+  <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" if="(eval autopilot=='asctec')">
     <param name="serial_port" value="/dev/ttyUSB0" />
-  </node-->
-  <node name="apm_handler" pkg="apm_handler" type="apm_handler_node" />
+  </node>
   
-  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node"/>
+  <node name="apm_handler" pkg="apm_handler" type="apm_handler_node" if="$(eval autopilot=='arducopter')"/>
+  
   
   <!--node name="recorder" pkg="rosbag" type="record" args="-a" /-->
 </launch>

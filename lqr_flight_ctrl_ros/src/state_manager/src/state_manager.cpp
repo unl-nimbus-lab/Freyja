@@ -5,8 +5,7 @@
 
 #define ROS_NODE_NAME "state_manager"
 
-#define DEG2RAD(D) ((D)*3.1415326/180.0)
-#define AJ_PI 3.14153
+
 StateManager::StateManager() : nh_(), priv_nh_("~")
 {
   state_vector_.resize( STATE_VECTOR_LEN );
