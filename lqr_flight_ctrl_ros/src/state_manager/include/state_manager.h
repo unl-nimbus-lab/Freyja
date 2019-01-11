@@ -11,6 +11,8 @@
 
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/TwistStamped.h>
+#include <sensor_msgs/NavSatFix.h>
 #include <common_msgs/CurrentState.h>
 #include <common_msgs/AsctecData.h>
 #include "aj_filter_collection.cpp"
@@ -19,7 +21,9 @@
 #endif
 
 typedef geometry_msgs::TransformStamped TFStamped;
-
+typedef geometry_msgs::TwistStamped TwStamped;
+#define DEG2RAD(D) ((D)*3.1415326/180.0)
+#define AJ_PI 3.14153
 
 /* The full state vector is defined as:
   [ pn, pe, pd, vn, ve, vd, roll, pitch, yaw, roll_rate_, pitch_rate_, yaw_rate_ ]
@@ -53,6 +57,9 @@ class StateManager
   
   ros::Time lastUpdateTime_;
   
+  /* Pick the source of information at launch time */
+  std::string state_source_;
+  
   /* Filter-specific details for computing velocity */
   int filter_len_;
   std::string filter_type_;
@@ -64,20 +71,29 @@ class StateManager
   
   public:
     StateManager();
-    #if USE_VICON_ == 1
+    /* launch-time parameter specifies which one to pick */
+    void initApmManager();
+    void initAsctecManager();
+    void initViconManager();
+
     /* Callback handler for Vicon */
     ros::Subscriber vicon_data_sub_;
     void viconCallback( const TFStamped::ConstPtr & ) __attribute__((hot));
-    #else
+
     /* Callback handler for asctec_onboard_data */
     ros::Subscriber asctec_data_sub_;
     void asctecDataCallback( const common_msgs::AsctecData::ConstPtr & );
-    #endif
+
+    /* Callback handlers for mavros data */
+    ros::Subscriber mavros_gps_sub_;
+    ros::Subscriber mavros_vel_sub_;
+    void mavrosGpsCallback( const sensor_msgs::NavSatFix::ConstPtr & );
+    void mavrosGpsVelCallback( const TwStamped::ConstPtr & );
+    
+    
     /* Publisher for state information */
     ros::Publisher state_pub_;
     
-    /* Compute velocity */
-    void computeVelocity( float&, float&, float&, float& );
 
 };
 #endif
