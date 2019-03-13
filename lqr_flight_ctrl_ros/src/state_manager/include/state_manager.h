@@ -15,13 +15,16 @@
 #include <sensor_msgs/NavSatFix.h>
 #include <common_msgs/CurrentState.h>
 #include <common_msgs/AsctecData.h>
+#include <nav_msgs/Odometry.h>
+
 #include "aj_filter_collection.cpp"
-#if USE_VICON_ == 1
+//#if USE_VICON_ == 1
   #include <tf/tf.h>
-#endif
+//#endif
 
 typedef geometry_msgs::TransformStamped TFStamped;
 typedef geometry_msgs::TwistStamped TwStamped;
+typedef nav_msgs::Odometry CameraOdom;
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
 #define AJ_PI 3.14153
 
@@ -75,6 +78,7 @@ class StateManager
     void initApmManager();
     void initAsctecManager();
     void initViconManager();
+    void initCameraManager();
 
     /* Callback handler for Vicon */
     ros::Subscriber vicon_data_sub_;
@@ -89,6 +93,10 @@ class StateManager
     ros::Subscriber mavros_vel_sub_;
     void mavrosGpsCallback( const sensor_msgs::NavSatFix::ConstPtr & );
     void mavrosGpsVelCallback( const TwStamped::ConstPtr & );
+    
+    /* Callback handler for camera updates */
+    ros::Subscriber camera_estimate_sub_;
+    void cameraUpdatesCallback( const CameraOdom::ConstPtr & );
     
     
     /* Publisher for state information */

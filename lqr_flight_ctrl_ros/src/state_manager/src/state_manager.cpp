@@ -10,10 +10,11 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
 {
   state_vector_.resize( STATE_VECTOR_LEN );
   
-  /* find out what the source of the state is:
+  /* find out what the source of state information is:
       > "vicon" for a motion capture system with ENU frame
       > "asctec" for Ascending Tech autopilots (see corresponding handler)
       > "apm" for ardupilot (uses mavros, see corresponding handler)
+      > "onboard_camera" for a downward-facing camera (pose+velocity)
   */ 
   std::string default_state_source( "vicon" );
   priv_nh_.param( "state_source", state_source_, default_state_source );
@@ -24,6 +25,8 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
     initAsctecManager();
   else if (state_source_ == "apm" )
     initApmManager();
+  else if( state_source_ == "onboard_camera" )
+    initCameraManager();
 
 
   /* Announce state publisher */
@@ -60,6 +63,8 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
     rate_filter_ = AjFilterCollection( -1, "median", "~" );
     filter_len_ = pose_filter_.getCurrentFilterLen();
   }
+  
+  // init history containers
   prev_pn_.resize( filter_len_ );
   prev_pe_.resize( filter_len_ );
   prev_pd_.resize( filter_len_ );
@@ -96,6 +101,12 @@ void StateManager::initApmManager()
                                 &StateManager::mavrosGpsCallback, this );
   mavros_vel_sub_ = nh_.subscribe( "/mavros/global_position/gp_vel", 1,
                                 &StateManager::mavrosGpsVelCallback, this );
+}
+
+void StateManager::initCameraManager()
+{
+  camera_estimate_sub_ = nh_.subscribe( "/down/position_velocity", 1,
+                                &StateManager::cameraUpdatesCallback, this );
 }
 
 

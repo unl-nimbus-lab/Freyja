@@ -198,3 +198,49 @@ void StateManager::mavrosGpsVelCallback( const TwStamped::ConstPtr &msg )
   state_pub_.publish( state_msg );
 
 }
+
+void StateManager::cameraUpdatesCallback( const CameraOdom::ConstPtr &msg )
+{
+  /* Assume that camera directly gives us positions AND velocity. This is
+    ok to do, so as to allow different modes of computation at the camera node;
+    meaning that it should handle its own velocity calculations (particularly
+    useful when using image Jacobians and such). This callback then simply
+    reformats the acquired data into a state vector of our style.
+    Odometry has to be one of the most ridiculously named structures ..
+    nav_msgs::Odometry - pose
+                          - pose
+                            - position {x,y,z}
+                            - orientation {Quaternion}
+                          - covariance (6x6)
+                       - twist
+                          - twist
+                            - linear {x,y,z}
+                            - angular {x,y,z}
+                          - covariance (6x6).
+     NOTE: axis convention aligns with camera plane axes!
+          x   -- lateral/horizontal/left(-) to right(+)
+          y   -- longitudinal/vertical/bottom(-) to top(+)
+          z   -- away from the camera (always positive)
+          yaw -- not handled yet (set to zero)
+          r/p -- not handled
+    */
+  state_vector_[0] = msg -> pose.pose.position.y;
+  state_vector_[1] = msg -> pose.pose.position.x;
+  state_vector_[2] = -( msg -> pose.pose.position.z );
+  
+  state_vector_[3] = msg -> twist.twist.linear.y;
+  state_vector_[4] = msg -> twist.twist.linear.x;
+  state_vector_[5] = -( msg -> twist.twist.linear.z );
+  
+  tf::Quaternion q;
+  tf::quaternionMsgToTF( msg -> pose.pose.orientation, q );
+  double roll, pitch, yaw;
+  tf::Matrix3x3(q).getRPY( roll, pitch, yaw );
+  state_vector_[8] = yaw;
+  
+  common_msgs::CurrentState state_msg;
+  state_msg.header.stamp = ros::Time::now();
+  for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
+    state_msg.state_vector[idx] = state_vector_[idx];
+  state_pub_.publish( state_msg );
+}
