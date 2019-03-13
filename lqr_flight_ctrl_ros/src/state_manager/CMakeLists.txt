@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(state_manager)
+
+# outdated flag, has no effect. Will be removed in the future.
 set( USINGVICON 1 )
 set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -DUSE_VICON_=${USINGVICON}" )
 

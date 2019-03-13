@@ -105,7 +105,7 @@ void StateManager::initApmManager()
 
 void StateManager::initCameraManager()
 {
-  camera_estimate_sub_ = nh_.subscribe( "/down/position_velocity", 1,
+  camera_estimate_sub_ = nh_.subscribe( "/onboard_camera/position_velocity", 1,
                                 &StateManager::cameraUpdatesCallback, this );
 }
 

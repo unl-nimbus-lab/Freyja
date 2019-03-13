@@ -5,7 +5,7 @@
 	<arg name="autopilot" default="asctec"/>
 	<arg name="use_velctrl_only" default="false"/>
 	
-	<!-- state source can be: "apm", "asctec" or "vicon" -->
+	<!-- state source can be: "apm", "asctec", "vicon" or "onboard_camera" -->
 	<!-- implemented filters: "median", "gauss" and "lwma" -->
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
     <param name="state_source" type="string" value="apm" />
