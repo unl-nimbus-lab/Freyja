@@ -1,0 +1,35 @@
+<launch>
+	<!-- vim: set ft=xml noet : -->
+	<!-- example launch script for ArduPilotMega based FCU's -->
+  <arg name="testing_attitude"/>
+	<arg name="fcu_url" default="/dev/ttyUSB0:57600" />
+	<!--arg name="fcu_url" default="/dev/ttyUSB0:115200" /-->
+	<arg name="gcs_url" default="" />
+	<arg name="tgt_system" default="1" />
+	<arg name="tgt_component" default="1" />
+	<arg name="log_output" default="screen" />
+	<arg name="fcu_protocol" default="v2.0" />
+	<arg name="respawn_mavros" default="false" />
+	<arg name="blacklisted" default="['waypoint', 'vfr_hud']"/>
+
+	<include file="$(find mavros)/launch/node.launch">
+		<!--arg name="pluginlists_yaml" value="$(find mavros)/launch/apm_pluginlists.yaml" /-->
+		<arg name="pluginlists_yaml" value="$(find pixhawk_defaults)/apm_pluginlists_aj.yaml" />
+		<arg name="config_yaml" value="$(find pixhawk_defaults)/apm_config_aj.yaml" />
+
+		<arg name="fcu_url" value="$(arg fcu_url)" />
+		<arg name="gcs_url" value="$(arg gcs_url)" />
+		<arg name="tgt_system" value="$(arg tgt_system)" />
+		<arg name="tgt_component" value="$(arg tgt_component)" />
+		<arg name="log_output" value="$(arg log_output)" />
+		<arg name="fcu_protocol" value="$(arg fcu_protocol)" />
+		<arg name="respawn_mavros" default="$(arg respawn_mavros)" />
+		<!--arg name="plugin_blacklist" value="$(arg blacklisted)" /-->
+	</include>
+	
+	<param name="/mavros/setpoint_attitude/use_quaternion" value="true" />
+	<param name="/mavros/conn/timesync_rate" value="0.0" />
+	
+	<!--node name="attitude_tester" pkg="atti_test" type="atti_test_node" if="$(eval testing_attitude == 1)"/-->
+	<!--include file="src/lqr_flight_ctrl_ros/controller.launch" if="$(eval testing_attitude == 0)"/-->
+</launch>
