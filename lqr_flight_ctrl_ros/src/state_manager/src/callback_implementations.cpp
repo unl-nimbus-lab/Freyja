@@ -224,20 +224,41 @@ void StateManager::cameraUpdatesCallback( const CameraOdom::ConstPtr &msg )
           yaw -- not handled yet (set to zero)
           r/p -- not handled
     */
+    
+  double vx, vy, vz;
+  
   state_vector_[0] = msg -> pose.pose.position.y;
   state_vector_[1] = msg -> pose.pose.position.x;
   state_vector_[2] = -( msg -> pose.pose.position.z );
   
+  // filter velocities maybe? Prefer a small-length filter ..
+  vx = msg -> twist.twist.linear.y;
+  vy = msg -> twist.twist.linear.x;
+  vz = -( msg -> twist.twist.linear.z );
+  prev_vn_.erase( prev_vn_.begin() );
+  prev_vn_.push_back( vx );
+  prev_ve_.erase( prev_ve_.begin() );
+  prev_ve_.push_back( vy );
+  prev_vd_.erase( prev_vd_.begin() );
+  prev_vd_.push_back( vz );
+  rate_filter_.filterObservations( prev_vn_, prev_ve_, prev_vd_, vx, vy, vz );
+  state_vector_[3] = vx;
+  state_vector_[4] = vy;
+  state_vector_[5] = vz;
+  
+  /* unfiltered:
   state_vector_[3] = msg -> twist.twist.linear.y;
   state_vector_[4] = msg -> twist.twist.linear.x;
   state_vector_[5] = -( msg -> twist.twist.linear.z );
+  */
   
   tf::Quaternion q;
   tf::quaternionMsgToTF( msg -> pose.pose.orientation, q );
   double roll, pitch, yaw;
   tf::Matrix3x3(q).getRPY( roll, pitch, yaw );
   state_vector_[8] = yaw;
-  
+
+  // publish away!
   common_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
