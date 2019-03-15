@@ -41,8 +41,11 @@ LQRController::LQRController() : nh_(), priv_nh_("~")
   float controller_period = 1.0/controller_rate_;
   controller_timer_ = nh_.createTimer( ros::Duration(controller_period),
                                       &LQRController::computeFeedback, this );
+  
+  /* Checks for correctness */
+  STATEFB_MISSING_INTRV_ = 0.5;
   have_state_update_ = false;
-  have_reference_update_ = false;                                   
+  have_reference_update_ = false;  
 }
 
 void LQRController::initLqrSystem()
@@ -115,22 +118,40 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   /* Wait for atleast one update, or architect the code better */
   if( !have_state_update_ )
     return;
-    
-  /* Compute control inputs (accelerations, in this case) */
-  Eigen::Matrix<double, 4, 1> control_input = -1 * lqr_K_ * reduced_state_;
   
-  /* Force saturation on downward acceleration */
-  control_input(2) = std::min( control_input(2), 8.0 );
-  control_input(2) -= 9.81;
+  float roll, pitch, yaw;
+  double T;
+  Eigen::Matrix<double, 4, 1> control_input;
   
-  /* Thrust */
-  double T = total_mass_ * control_input.head<3>().norm();
+  bool state_valid = true;
   
-  /* Roll, pitch and yaw */
-  Eigen::Matrix<double, 3, 1> Z = rot_yaw_ * control_input.head<3>() * (-total_mass_/T);
-  float roll = std::asin( -Z(1) );
-  float pitch = std::atan( Z(0)/Z(2) );
-  float yaw = control_input(3);
+  /* Check the difference from last state update time */
+  if( (ros::Time::now() - last_state_update_t_).toSec() > STATEFB_MISSING_INTRV_ )
+  {
+    /* State feedback missing for more than specified interval. Try descend */
+    roll = pitch = yaw = 0.0;
+    T = (total_mass_ * 9.81) - 0.5;
+    control_input << 0.0, 0.0, 0.0, 0.0;
+    state_valid = false;
+  }
+  else
+  {
+    /* Compute control inputs (accelerations, in this case) */
+    control_input = -1 * lqr_K_ * reduced_state_;
+  
+    /* Force saturation on downward acceleration */
+    control_input(2) = std::min( control_input(2), 8.0 );
+    control_input(2) -= 9.81;
+  
+    /* Thrust */
+    T = total_mass_ * control_input.head<3>().norm();
+  
+    /* Roll, pitch and yawrate */
+    Eigen::Matrix<double, 3, 1> Z = rot_yaw_ * control_input.head<3>() * (-total_mass_/T);
+    roll = std::asin( -Z(1) );
+    pitch = std::atan( Z(0)/Z(2) );
+    yaw = control_input(3);
+  }
   
   /* Debug information */
   common_msgs::ControllerDebug debug_msg;
@@ -143,6 +164,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   debug_msg.roll = roll;
   debug_msg.pitch = pitch;
   debug_msg.yaw = yaw;
+  debug_msg.state_valid = state_valid;
   controller_debug_pub_.publish( debug_msg );
   
   /* Actual commanded input */
