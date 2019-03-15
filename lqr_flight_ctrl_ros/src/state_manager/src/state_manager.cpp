@@ -39,18 +39,15 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
 
   if( filter_type_ == "gauss" )
   {
+    std::vector<double> fc;
     /* Init filter: mean 10, stddev = 5 */
     if( filter_len_ = 21 )
-    {
-      std::vector<double> fc = { 0.0108, 0.0158, 0.0222, 0.0299, 0.0388, 0.0484, 
-                                0.0579, 0.0666, 0.0737, 0.0782, 0.0798, 0.0782,
-                                0.0737, 0.0666, 0.0579, 0.0484, 0.0388, 0.0299,
-                                0.0222, 0.0158, 0.0108};
-    }
+      fc = { 0.0108, 0.0158, 0.0222, 0.0299, 0.0388, 0.0484, 0.0579, 0.0666,
+             0.0737, 0.0782, 0.0798, 0.0782, 0.0737, 0.0666, 0.0579, 0.0484,
+             0.0388, 0.0299, 0.0222, 0.0158, 0.0108 };
     else if( filter_len_ == 5 )
-    {
-      std::vector<double> fc = {0.1534,	0.2214,	0.2504,	0.2214,	0.1534};
-    }
+      fc = { 0.1534,	0.2214,	0.2504,	0.2214,	0.1534 };
+
     pose_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );
     rate_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );
     ROS_INFO( "Gaussian filter init!" );
