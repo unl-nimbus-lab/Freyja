@@ -49,7 +49,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
     }
     else if( filter_len_ == 5 )
     {
-      std::vector<double> fc = {0.1534,	0.2214,	0.2504,	0.2214,	0.1534}
+      std::vector<double> fc = {0.1534,	0.2214,	0.2504,	0.2214,	0.1534};
     }
     pose_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );
     rate_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );

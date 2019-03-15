@@ -49,6 +49,7 @@ class LQRController
   Eigen::Matrix<double, 3, 3> rot_yaw_;
   
   float STATEFB_MISSING_INTRV_;
+  ros::Time last_state_update_t_;
   bool have_state_update_;
   bool have_reference_update_;
   

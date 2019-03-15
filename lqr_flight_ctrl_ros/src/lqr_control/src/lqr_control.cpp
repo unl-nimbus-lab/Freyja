@@ -87,7 +87,6 @@ void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &ms
   /* reduced state is the first 6 elements, and yaw */
   Eigen::Matrix<double, 13,1 >temp( sv.data() );
   reduced_state_ << temp.head<6>() , double(yaw);
-  have_state_update_ = true;
   
   /* compute x - xr right here */
   std::unique_lock<std::mutex> rsmtx( reference_state_mutex_, std::defer_lock );
@@ -96,7 +95,10 @@ void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &ms
     reduced_state_.head<6>() -= reference_state_.head<6>();
     /* yaw-error is done differently */
     reduced_state_(6) = calcYawError( reduced_state_(6), reference_state_(6) );
-  }  
+  }
+  
+  have_state_update_ = true;
+  last_state_update_t_ = ros::Time::now();
 }
 
 void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
