@@ -30,9 +30,19 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+# simple trajectory provider
 add_executable(trajectory_provider_node src/trajectory_provider.cpp)
 add_dependencies(trajectory_provider_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(trajectory_provider_node
+   ${catkin_LIBRARIES}
+ )
+
+
+# vision-based guidance for approach
+add_executable(trajectory_shaper_node src/trajectory_shaper.cpp)
+add_dependencies(trajectory_shaper_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+target_link_libraries(trajectory_shaper_node
    ${catkin_LIBRARIES}
  )
