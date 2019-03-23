@@ -26,7 +26,7 @@ enum class SystemState
 // const defines
 const float BEGIN_APPROACH_DIST = 1.0; // after this we begin approach to grasp
 const int OBS_HISTORY_LEN = 200;  // collect this many observations to decide
-const float ACCEPTABLE_VARIANCE = 0.3*0.3;  // this defines "steady hover"
+const float ACCEPTABLE_VARIANCE = 0.2*0.2;  // this defines "steady hover"
 const float APPROACH_VELOCITY = 0.3;
 const float IDEAL_HOVER_ZPOS = -1.0;
 
@@ -95,7 +95,7 @@ void assess_approach_confidence()
   if( varc_dist < ACCEPTABLE_VARIANCE )
   {
     // we are hovering pretty decently
-    if( mean_dist < BEGIN_APPROACH_DIST )
+    if( mean_dist < HOVER_ZPOS_TARGET )
     {
       // we are hovering close enough, begin approach
       estimated_system_state = SystemState::HOVERING_CLOSE;
@@ -132,6 +132,8 @@ void getCurrentReference( TrajRef &ref_state )
                                 approach_trajectory( ref_state );
                                 break;                            
   
+    default:
+                                hover_trajectory( ref_state );
   }
 
 }
@@ -190,8 +192,8 @@ int main( int argc, char** argv )
   ros::Publisher traj_pub;
   traj_pub = nh.advertise <TrajRef> ( "/reference_state", 1, true );
   
-  ros::Publisher traj_debug;
-  traj_debug = nh.advertise <TrajDebug> ( "/trajectory_debug", 1, true );
+  ros::Publisher traj_debug_pub;
+  traj_debug_pub = nh.advertise <TrajDebug> ( "/trajectory_debug", 1, true );
   
   /* Create subscriber for state */
   ros::Subscriber current_state_sub;
@@ -212,6 +214,7 @@ int main( int argc, char** argv )
     debug_msg.header.stamp = t;
     debug_msg.system_state = (uint8_t)estimated_system_state;
     debug_msg.hover_z_target = HOVER_ZPOS_TARGET;
+    traj_debug_pub.publish( debug_msg );
 
     ros::spinOnce();
     update_rate.sleep();
