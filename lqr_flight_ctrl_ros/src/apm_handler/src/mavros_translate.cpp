@@ -22,7 +22,7 @@
 #define ROLL_MIN -0.785398
 #define YAW_MAX 0.785398
 #define YAW_MIN -0.785398
-#define THRUST_MAX 60
+#define THRUST_MAX 70
 
 #define ROS_NODE_NAME "mavros_translator"
 
@@ -40,7 +40,7 @@ void anglesToDouble( double &tgt_r, double &tgt_p, double &tgt_y )
   tgt_y = tgt_y / YAW_MAX;
 }
 
-void thrustToDouble( double &t )
+inline void thrustToDouble( double &t )
 {
   t /= THRUST_MAX;
 }

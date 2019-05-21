@@ -1,7 +1,8 @@
 <launch>
 	<!-- vim: set ft=xml noet : -->
-	<!-- example launch script for ArduPilotMega based FCU's -->
-  <arg name="testing_attitude"/>
+	<!-- Launch script for ArduPilotMega based FCU's -->
+	<!-- Customised for NimbusLab indoor flights. ~aj -->
+
 	<arg name="fcu_url" default="/dev/ttyUSB0:57600" />
 	<!--arg name="fcu_url" default="/dev/ttyUSB0:115200" /-->
 	<arg name="gcs_url" default="" />
@@ -13,9 +14,8 @@
 	<arg name="blacklisted" default="['waypoint', 'vfr_hud']"/>
 
 	<include file="$(find mavros)/launch/node.launch">
-		<!--arg name="pluginlists_yaml" value="$(find mavros)/launch/apm_pluginlists.yaml" /-->
-		<arg name="pluginlists_yaml" value="$(find pixhawk_defaults)/apm_pluginlists_aj.yaml" />
-		<arg name="config_yaml" value="$(find pixhawk_defaults)/apm_config_aj.yaml" />
+		<arg name="pluginlists_yaml" value="$(find pixhawk_defaults)/apm_pluginlists_nimbus.yaml" />
+		<arg name="config_yaml" value="$(find pixhawk_defaults)/apm_config_nimbus.yaml" />
 
 		<arg name="fcu_url" value="$(arg fcu_url)" />
 		<arg name="gcs_url" value="$(arg gcs_url)" />
@@ -27,9 +27,8 @@
 		<!--arg name="plugin_blacklist" value="$(arg blacklisted)" /-->
 	</include>
 	
+	<!-- global params for keeping mavros under control -->
 	<param name="/mavros/setpoint_attitude/use_quaternion" value="true" />
 	<param name="/mavros/conn/timesync_rate" value="0.0" />
 	
-	<!--node name="attitude_tester" pkg="atti_test" type="atti_test_node" if="$(eval testing_attitude == 1)"/-->
-	<!--include file="src/lqr_flight_ctrl_ros/controller.launch" if="$(eval testing_attitude == 0)"/-->
 </launch>

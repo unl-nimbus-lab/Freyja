@@ -1,36 +1,56 @@
 <launch>
 	<!-- vim: set ft=xml noet : -->
+	
+	<!-- Common launch file for the LQR control framework.
+			Supports both AscTec and Pixhawk-based vehicles. Can
+			also do velocity-only control (ignores position refs).
+			~ aj // Nimbus Lab.
+	-->
 
 	<!-- allowed autopilots: "asctec" or "arducopter" -->
-	<arg name="autopilot" default="asctec"/>
+	<!-- must provide vicon_object -->
+	<arg name="autopilot" default="arducopter"/>
+	<arg name="vicon_object"/>
+	<arg name="total_mass" default="0.95"/>
+	<!-- true if providing your own trajectory source -->
+	<arg name="use_external_trajectory" default="false"/>
 	<arg name="use_velctrl_only" default="false"/>
+	<arg name="start_rosbag" default="false"/>
+	
 	
 	<!-- state source can be: "apm", "asctec", "vicon" or "onboard_camera" -->
 	<!-- implemented filters: "median", "gauss" and "lwma" -->
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
     <param name="state_source" type="string" value="onboard_camera" />
     <param name="filter_type" type="string" value="median" />
-    <param name="vicon_object" type="string" value="/vicon/FW_LASER/FW_LASER" />
+    <param name="vicon_object" type="string" value="$(arg vicon_object)" />
   </node>
 
-  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node"/>
+	<!-- an example trajectory node for reference -->
+  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node" if="$(eval not use_external_trajectory)"/>
   
+  <!-- control node (see velctrl flag above) -->
   <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" if="$(eval not use_velctrl_only)">
 		<param name="controller_rate" value="40" type="int" />
-  	<param name="total_mass" value="0.95" type="double" />
+  	<param name="total_mass" value="$(arg total_mass)" type="double" />
   </node>
   
   <node name="lqr_vel_controller" pkg="lqr_vel_ctrl" type="lqr_vel_ctrl_node" if="$(eval use_velctrl_only)">
     <param name="controller_rate" value="30" type="int" />
-    <param name="total_mass" value="0.95" type="double" />
+    <param name="total_mass" value="$(arg total_mass)" type="double" />
   </node>
-  
+
+  <!-- autopilot communication node -->
   <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" if="$(eval autopilot=='asctec')">
     <param name="serial_port" value="/dev/ttyUSB0" />
   </node>
   
-  <node name="apm_handler" pkg="apm_handler" type="apm_handler_node" if="$(eval autopilot=='arducopter')"/>
+  <!-- apm/px4 needs a handler for translation, plus a mavros node -->
+  <group if="$(eval autopilot=='arducopter')">
+  	<node name="apm_handler" pkg="apm_handler" type="apm_handler_node" />
+  	<include file="$(find pixhawk_defaults)/apm_nimbus.launch"/>
+  </group>
   
-  
-  <!--node name="recorder" pkg="rosbag" type="record" args="-a" /-->
+  <!-- record stuff -->
+  <node name="recorder" pkg="rosbag" type="record" args="-a" if="$(eval start_rosbag)">
 </launch>
