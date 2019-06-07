@@ -160,7 +160,7 @@ TrajRef getCurrentReference( const ros::Duration &cur_time )
   return ref_state;
 }
 */
-/*
+/* CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
 TrajRef getCurerntReference( const ros::Duration &cur_time )
 {
   TrajRef ref_state;

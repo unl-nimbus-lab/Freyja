@@ -11,6 +11,8 @@
 	<!-- must provide vicon_object -->
 	<arg name="autopilot" default="arducopter"/>
 	<arg name="vicon_object"/>
+	<!-- use "device:baudrate" for apm, "device" for asctec -->
+	<arg name="comm_port" default="/dev/ttyUSB0:57600"/>
 	<arg name="total_mass" default="0.95"/>
 	<!-- true if providing your own trajectory source -->
 	<arg name="use_external_trajectory" default="false"/>
@@ -21,7 +23,7 @@
 	<!-- state source can be: "apm", "asctec", "vicon" or "onboard_camera" -->
 	<!-- implemented filters: "median", "gauss" and "lwma" -->
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
-    <param name="state_source" type="string" value="onboard_camera" />
+    <param name="state_source" type="string" value="vicon" />
     <param name="filter_type" type="string" value="median" />
     <param name="vicon_object" type="string" value="$(arg vicon_object)" />
   </node>
@@ -48,9 +50,11 @@
   <!-- apm/px4 needs a handler for translation, plus a mavros node -->
   <group if="$(eval autopilot=='arducopter')">
   	<node name="apm_handler" pkg="apm_handler" type="apm_handler_node" />
-  	<include file="$(find pixhawk_defaults)/apm_nimbus.launch"/>
+  	<include file="$(find pixhawk_defaults)/apm_nimbus.launch">
+  		<arg name="fcu_url" value="$(arg comm_port)"/>
+  	</include>
   </group>
   
   <!-- record stuff -->
-  <node name="recorder" pkg="rosbag" type="record" args="-a" if="$(eval start_rosbag)">
+  <node name="recorder" pkg="rosbag" type="record" args="-a" if="$(eval start_rosbag)"/>
 </launch>
