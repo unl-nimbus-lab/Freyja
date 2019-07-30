@@ -33,7 +33,7 @@ TrajRef getCurrentReference( const ros::Duration &cur_time )
   TrajRef ref_state;
   ref_state.pn = 0.0;
   ref_state.pe = 0.0;
-  ref_state.pd = -1.0;
+  ref_state.pd = -0.8;
   ref_state.vn = 0.0;
   ref_state.ve = 0.0;
   ref_state.vd = 0.0;

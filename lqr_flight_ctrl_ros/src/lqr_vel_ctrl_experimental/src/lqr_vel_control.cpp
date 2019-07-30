@@ -1,4 +1,5 @@
-/* Implementation of the LQR-feedback loop.
+/* Implementation of the LQR-feedback loop for [pure] velocity control.
+    Position refs are ignored.
 
    Note: at this time, the feedback gain K is computed from Matlab. If somebody
    wants to write a solution to the algebraic Riccati equations that compute the
@@ -8,16 +9,18 @@
    -- aj / 17th Nov, 2017.
 */
 
-#include "lqr_control.h"
+#include "lqr_vel_control.h"
 
 #define ROS_NODE_NAME "lqr_vel_ctrl"
-LQRController::LQRController() : nh_("~")
+#define pi 3.1416
+
+LQRController::LQRController() : nh_(), priv_nh_("~")
 {
   int controller_rate_default = 50;
-  nh_.param( "controller_rate", controller_rate_, controller_rate_default );
+  priv_nh_.param( "controller_rate", controller_rate_, controller_rate_default );
   
-  float mass_default = 0.55;
-  nh_.param( "total_mass", total_mass_, mass_default );
+  float mass_default = 0.85;
+  priv_nh_.param( "total_mass", total_mass_, mass_default );
   
   /* initialise system params, matrices and controller configuration */
   initLqrSystem();
@@ -39,6 +42,8 @@ LQRController::LQRController() : nh_("~")
   float controller_period = 1.0/controller_rate_;
   controller_timer_ = nh_.createTimer( ros::Duration(controller_period),
                                       &LQRController::computeFeedback, this );
+  /* Checks for correctness */
+  STATEFB_MISSING_INTRV_ = 0.5;
   have_state_update_ = false;
   have_reference_update_ = false;                                   
 }
@@ -64,6 +69,13 @@ void LQRController::initLqrSystem()
             0.0, 0.0, 0.0, 1.0000;
 }
 
+double LQRController::calcYawError( const double &a, const double &b )
+{
+  double yd = fmod( a - b + pi, 2*pi );
+  yd = yd < 0 ? yd+=2*pi : yd;
+  return yd-pi; 
+}
+
 void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &msg )
 {
   /* Parse message to obtain state and reduced state information */
@@ -81,11 +93,16 @@ void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &ms
   /* reduced state is the first 6 elements, and yaw */
   Eigen::Matrix<double, 13,1 >temp( sv.data() );
   reduced_state_ << temp.segment<3>(3) , double(yaw);
-  have_state_update_ = true;
   
   std::unique_lock<std::mutex> rsmtx( reference_state_mutex_, std::defer_lock );
   if( have_reference_update_ && rsmtx.try_lock() )
-    reduced_state_ -= reference_state_.tail<4>();
+  {
+    reduced_state_.head<3>() -= reference_state_.segment<3>(3);
+    /* yaw is handled differently */
+    reduced_state_(3) = calcYawError( reduced_state_(3), reference_state_(6));
+  }
+  have_state_update_ = true;
+  last_state_update_t_ = ros::Time::now();
 }
 
 void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
@@ -107,22 +124,40 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   /* Wait for atleast one update, or architect the code better */
   if( !have_state_update_ )
     return;
-    
-  /* Compute control inputs (accelerations, in this case) */
-  Eigen::Matrix<double, 4, 1> control_input = -1 * lqr_K_ * reduced_state_;
   
-  /* Force saturation on downward acceleration */
-  control_input(2) = std::min( control_input(2), 8.0 );
-  control_input(2) -= 9.81;
+  float roll, pitch, yaw;
+  double T;
+  Eigen::Matrix<double, 4, 1> control_input;
   
-  /* Thrust */
-  double T = total_mass_ * control_input.head<3>().norm();
+  bool state_valid = true;
   
-  /* Roll, pitch and yaw */
-  Eigen::Matrix<double, 3, 1> Z = rot_yaw_ * control_input.head<3>() * (-total_mass_/T);
-  float roll = std::asin( -Z(1) );
-  float pitch = std::atan( Z(0)/Z(2) );
-  float yaw = control_input(3);
+  /* Check the difference from last state update time */
+  if( (ros::Time::now() - last_state_update_t_).toSec() > STATEFB_MISSING_INTRV_ )
+  {
+    /* State feedback missing for more than specified interval. Try descend */
+    roll = pitch = yaw = 0.0;
+    T = (total_mass_ * 9.81) - 0.5;
+    control_input << 0.0, 0.0, 0.0, 0.0;
+    state_valid = false;
+  }
+  else
+  {
+    /* Compute control inputs (accelerations, in this case) */
+    control_input = -1 * lqr_K_ * reduced_state_;
+  
+    /* Force saturation on downward acceleration */
+    control_input(2) = std::min( control_input(2), 8.0 );
+    control_input(2) -= 9.81;
+  
+    /* Thrust */
+    T = total_mass_ * control_input.head<3>().norm();
+  
+    /* Roll, pitch and yaw */
+    Eigen::Matrix<double, 3, 1> Z = rot_yaw_ * control_input.head<3>() * (-total_mass_/T);
+    roll = std::asin( -Z(1) );
+    pitch = std::atan( Z(0)/Z(2) );
+    yaw = control_input(3);
+  }
   
   /* Debug information */
   common_msgs::ControllerDebug debug_msg;
@@ -135,6 +170,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   debug_msg.roll = roll;
   debug_msg.pitch = pitch;
   debug_msg.yaw = yaw;
+  debug_msg.state_valid = state_valid;
   controller_debug_pub_.publish( debug_msg );
   
   /* Actual commanded input */

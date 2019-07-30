@@ -43,7 +43,7 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
 )
 
-add_executable(lqr_vel_ctrl_node src/lqr_control.cpp)
+add_executable(lqr_vel_ctrl_node src/lqr_vel_control.cpp)
 add_dependencies(lqr_vel_ctrl_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(lqr_vel_ctrl_node
    ${catkin_LIBRARIES}
