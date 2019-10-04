@@ -12,7 +12,6 @@ plugin_blacklist:
 - imu_pub
 - local_position
 - manual_control
-- rc_io
 - adsb
 - fake_gps
 - gps_rtk

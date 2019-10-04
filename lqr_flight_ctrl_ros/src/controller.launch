@@ -17,6 +17,7 @@
 	<!-- true if providing your own trajectory source -->
 	<arg name="use_external_trajectory" default="false"/>
 	<arg name="use_velctrl_only" default="false"/>
+	<arg name="bias_compensation" default="true" />
 	<arg name="start_rosbag" default="false"/>
 	
 	
@@ -29,21 +30,31 @@
   </node>
 
 	<!-- an example trajectory node for reference -->
-  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node" if="$(eval not use_external_trajectory)"/>
+  <node name="trajectory_provider" pkg="trajectory_provider" type="trajectory_provider_node"
+				if="$(eval not use_external_trajectory)">
+		<!-- "hover", "circle", "hover2" -->
+  	<param name="example_traj_type" type="string" value="hover"/>
+	</node>
   
   <!-- control node (see velctrl flag above) -->
-  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node" if="$(eval not use_velctrl_only)">
-		<param name="controller_rate" value="40" type="int" />
-  	<param name="total_mass" value="$(arg total_mass)" type="double" />
+  <node name="lqr_controller" pkg="lqr_control" type="lqr_control_node"
+  			output="screen" if="$(eval not use_velctrl_only)">
+		<param name="controller_rate" value="45" type="int" />
+  	<param name="total_mass" type="double" value="$(arg total_mass)"/>
+  	<param name="use_stricter_gains" type="bool" value="false" />
+  	<param name="estimator_rate" type="int" value="70" />
+  	<param name="bias_compensation" type="bool" value="$(arg bias_compensation)" />
   </node>
   
-  <node name="lqr_vel_controller" pkg="lqr_vel_ctrl" type="lqr_vel_ctrl_node" if="$(eval use_velctrl_only)">
-    <param name="controller_rate" value="30" type="int" />
+  <node name="lqr_vel_controller" pkg="lqr_control" type="lqr_vel_ctrl_node"
+  			if="$(eval use_velctrl_only)">
+    <param name="controller_rate" type="int" value="30" />
     <param name="total_mass" value="$(arg total_mass)" type="double" />
   </node>
 
   <!-- autopilot communication node -->
-  <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node" if="$(eval autopilot=='asctec')">
+  <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node"
+  			if="$(eval autopilot=='asctec')">
     <param name="serial_port" value="/dev/ttyUSB0" />
   </node>
   

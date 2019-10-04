@@ -41,7 +41,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   {
     std::vector<double> fc;
     /* Init filter: mean 10, stddev = 5 */
-    if( filter_len_ = 21 )
+    if( filter_len_ == 21 )
       fc = { 0.0108, 0.0158, 0.0222, 0.0299, 0.0388, 0.0484, 0.0579, 0.0666,
              0.0737, 0.0782, 0.0798, 0.0782, 0.0737, 0.0666, 0.0579, 0.0484,
              0.0388, 0.0299, 0.0222, 0.0158, 0.0108 };

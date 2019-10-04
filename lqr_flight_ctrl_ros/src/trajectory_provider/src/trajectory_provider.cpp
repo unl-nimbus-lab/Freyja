@@ -15,6 +15,8 @@
 #define ROS_NODE_NAME "trajectory_provider"
 typedef common_msgs::ReferenceState TrajRef;
 
+#define DEG2RAD(D) ((D)*3.1415326/180.0)
+
 // global decl for "start time". This can be reset by a callback
 ros::Time init_time;
 
@@ -28,21 +30,66 @@ void timeResetCallback( const std_msgs::UInt8::ConstPtr &msg )
 }
 
 // HOVER AT A POINT 
-TrajRef getCurrentReference( const ros::Duration &cur_time )
+TrajRef getHoverReference( const ros::Duration &cur_time )
 {
   TrajRef ref_state;
   ref_state.pn = 0.0;
   ref_state.pe = 0.0;
-  ref_state.pd = -0.8;
+  ref_state.pd = -1.0;
   ref_state.vn = 0.0;
   ref_state.ve = 0.0;
   ref_state.vd = 0.0;
   ref_state.yaw = 0.0;
+  ref_state.an = 0.0;
+  ref_state.ae = 0.0;
+  ref_state.ad = 0.0;
   ref_state.header.stamp = ros::Time::now();
   return ref_state;
 }
-/*
+// CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
+TrajRef getCircleReference( const ros::Duration &cur_time )
+{
+  TrajRef ref_state;
+  float t = cur_time.toSec();
+  float xvel, xpos;
+  ref_state.header.stamp = ros::Time::now();
+  
+  ref_state.pn = 1.0*std::sin( 3.0*t );
+  ref_state.pe = 1.0*std::cos( 3.0*t );
+  ref_state.pd = -1.0;
+  
+  ref_state.vn = 3.0*std::cos( 3.0*t );
+  ref_state.ve = -3.0*std::sin( 3.0*t );
+  ref_state.vd = 0.0;
+  
+  ref_state.yaw = 0.0;
 
+  // set an, ae, ad to second derivatives if needed for FF..
+  return ref_state;
+}
+
+TrajRef getDefaultReference( const ros::Duration &cur_time )
+{
+  TrajRef ref_state;
+  ref_state.pn = 1.0;
+  ref_state.pe = 1.0;
+  ref_state.pd = -1.5;
+  ref_state.vn = 0.0;
+  ref_state.ve = 0.0;
+  ref_state.vd = 0.0;
+  ref_state.yaw = DEG2RAD(-120.0);
+  ref_state.an = 0.0;
+  ref_state.ae = 0.0;
+  ref_state.ad = 0.0;
+  ref_state.header.stamp = ros::Time::now();
+  return ref_state;
+}
+
+/*
+  Ascend at point A, hover, go to B ..
+  hover at B, descend, ascend at B, hover ..
+  go to A, hover, descend at A .. Repeat.
+  
 TrajRef getCurrentReference( const ros::Duration &cur_time )
 {
   TrajRef ref_state;
@@ -160,52 +207,11 @@ TrajRef getCurrentReference( const ros::Duration &cur_time )
   return ref_state;
 }
 */
-/* CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
-TrajRef getCurerntReference( const ros::Duration &cur_time )
-{
-  TrajRef ref_state;
-  float t = cur_time.toSec();
-  float xvel, xpos;
-  ref_state.header.stamp = ros::Time::now();
-  
-  ref_state.pn = 0.8*std::sin( 4.0*cur_time.toSec() );
-  ref_state.pe = 0.8*std::cos( 4.0*cur_time.toSec() );
-  ref_state.pd = -1.0;
-  
-  ref_state.vn = 3.2*std::cos( 4.0*cur_time.toSec() );
-  ref_state.ve = -3.2*std::sin( 4.0*cur_time.toSec() );
-  ref_state.vd = 0.0;
-  
-  ref_state.yaw = 0.0;
-  /*
-  float mod_t = std::fmod(t, 20.0);
-  if( mod_t < 10.0 )
-  {
-    xpos = 0.5*mod_t - 2.5;
-    xvel = 0.5;
-  }
-  else
-  {
-    xpos = -0.5*mod_t + 7.5;
-    xvel = -0.5;
-  }
-  ref_state.pn = 0.0;
-  ref_state.pe = xpos;
-  ref_state.pd = -1.0;
-  
-  ref_state.vn = 0;
-  ref_state.ve = xvel;
-  ref_state.vd = 0.0;
-  
-  ref_state.yaw = 0.0;
-  */
-//  return ref_state;
-//}
 
 int main( int argc, char** argv )
 {
   ros::init( argc, argv, ROS_NODE_NAME );
-  ros::NodeHandle nh;
+  ros::NodeHandle nh, priv_nh("~");
 
   /* Publisher for trajectory */
   ros::Publisher traj_pub;
@@ -214,6 +220,9 @@ int main( int argc, char** argv )
   /* Create subscriber for resetting time -- restart the trajectory */
   ros::Subscriber time_reset_sub;
   time_reset_sub = nh.subscribe( "/reset_trajectory_time", 1, timeResetCallback );
+  
+  std::string traj_type;
+  priv_nh.param( "example_traj_type", traj_type, std::string("hover") );
 
   /* How fast should a trajectory update be made? */
   ros::Rate update_rate(50);
@@ -222,7 +231,12 @@ int main( int argc, char** argv )
   while( ros::ok() )
   {
     TrajRef ref_state;
-    ref_state = getCurrentReference( ros::Time::now() - init_time );
+    if( traj_type == "circle" )
+      ref_state = getCircleReference( ros::Time::now() - init_time );
+    else if( traj_type == "hover" )
+      ref_state = getHoverReference( ros::Time::now() - init_time );
+    else
+      ref_state = getDefaultReference( ros::Time::now() - init_time );
     traj_pub.publish( ref_state );
 
     ros::spinOnce();

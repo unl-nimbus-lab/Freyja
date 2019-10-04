@@ -1,6 +1,7 @@
-# Control commands for the AscTec HLP/LLP
-# Expect rpyt to be in -1 .. +1 double
-# ctrl_mode is 8 bits: [ x x gps height thrust yaw roll pitch ]
+# Control commands for the attitude controller.
+# Need to translate differently for AscTec HLP/LLP, PX4, AC etc.
+# Attitude in radians, thrust in *Newtons*. No scaling!
+# ctrl_mode is 8 bits (asctec): [ x x gps height thrust yaw roll pitch ]
 
 float64 roll
 float64 pitch

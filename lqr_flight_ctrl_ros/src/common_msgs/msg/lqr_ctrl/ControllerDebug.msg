@@ -1,4 +1,5 @@
-# Debug message for controller.
+# Debug message from controller.
+# Often useful for observers, lqr_u is the 4-axis acceleration vector.
 # State can be invalid due to time delay, or a dead source.
 
 Header header

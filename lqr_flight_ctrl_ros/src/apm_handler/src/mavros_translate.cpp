@@ -50,7 +50,7 @@ void rpytCommandCallback( const CtrlInput &msg )
   The output from the controller is target roll, pitch and yawrate values,
   along with target thrust. It also outputs a bitmask for the contolled axes,
   but I'm going to ignore it for a moment.
-  @TODO: do something with the control bitmask.
+  @TODO: do something with the control bitmask if needed.
   */
   double tgt_roll = msg -> roll;
   double tgt_pitch = -( msg -> pitch );

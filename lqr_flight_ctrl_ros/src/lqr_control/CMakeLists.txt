@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 #cmake_minimum_required(VERSION 3.1.0)
 project(lqr_control)
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3" )
+set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wall" )
 
 
 find_package(catkin REQUIRED COMPONENTS
@@ -43,8 +43,16 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
 )
 
-add_executable(lqr_control_node src/lqr_control.cpp)
+# lqr with bias estimator 
+add_executable(lqr_control_node src/lqr_control_bias.cpp src/bias_estimator.cpp)
 add_dependencies(lqr_control_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(lqr_control_node
+   ${catkin_LIBRARIES}
+ )
+
+# lqr with only velocity control 
+add_executable(lqr_vel_ctrl_node src/lqr_vel_control.cpp)
+add_dependencies(lqr_vel_ctrl_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(lqr_vel_ctrl_node
    ${catkin_LIBRARIES}
  )

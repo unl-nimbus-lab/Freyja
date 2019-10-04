@@ -3,7 +3,13 @@ project(state_manager)
 
 # outdated flag, has no effect. Will be removed in the future.
 set( USINGVICON 1 )
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -DUSE_VICON_=${USINGVICON}" )
+set( LQE_ORDER 2 )
+set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
+      -std=c++11 \
+      -O3 \
+      -DUSE_VICON_=${USINGVICON} \
+      -DLQE_INTEGRATOR_ORDER_=${LQE_ORDER}" 
+   )
 
 find_package(catkin REQUIRED COMPONENTS
   message_generation
@@ -37,3 +43,12 @@ add_dependencies(state_manager_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin
 target_link_libraries(state_manager_node
    ${catkin_LIBRARIES}
  )
+
+### Can use state estimator INSTEAD of manager with the right modifications
+### This contains an LQE (Kalman) for full state.
+
+#add_executable(bias_estimator_node src/state_estimator.cpp)
+#add_dependencies(bias_estimator_node ${${PROJECT_NAME}_EXPORTED_TARGETS}${catkin_EXPORTED_TARGETS})
+#target_link_libraries(bias_estimator_node
+#   ${catkin_LIBRARIES}
+# )

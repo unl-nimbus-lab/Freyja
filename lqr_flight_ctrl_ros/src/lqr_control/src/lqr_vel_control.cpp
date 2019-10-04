@@ -72,7 +72,7 @@ void LQRController::initLqrSystem()
 double LQRController::calcYawError( const double &a, const double &b )
 {
   double yd = fmod( a - b + pi, 2*pi );
-  yd = yd < 0 ? yd+=2*pi : yd;
+  yd = yd < 0 ? yd+2*pi : yd;
   return yd-pi; 
 }
 
