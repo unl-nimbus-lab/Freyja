@@ -1,8 +1,12 @@
 /*
+  Optimal full state 3-axis state observer: Luenberger/Kalman fashion.
   BiasEstimator is befriended by LQRController class, and it therefore has
   direct unfettered access to its members. This prevents memcpy overheads, and
   keeps only one copy of variables such as current_state and control_input.
-  Race conditions are handled here.
+  Race conditions are handled here. LQRController will contain a reference to an
+  object of this class.
+  
+  -- aj / 27th Sept, 2019.
 */
 
 #include <mutex>

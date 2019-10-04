@@ -1,3 +1,14 @@
+/* Optimal full-state 3-axis bias estimator.
+   State vector being observed is:
+    [pn, pe, pd, vn, ve, vd, bn, be, bd]^T
+    
+   Closed-loop gains for the observer are adjusted by Kalman filter. One could
+   also place the eigenvalues using matlab's place command and use this as
+   a standard Luenberger observer.
+   
+  -- aj / 27th Sept, 2019.
+*/
+
 #include "bias_estimator.h"
 
 #define ROS_NODE_NAME "state_estimator_kf"
