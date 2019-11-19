@@ -86,7 +86,8 @@ void StateManager::initViconManager()
 
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
-                                    &StateManager::viconCallback, this );
+                                    &StateManager::viconCallback, this,
+                                    ros::TransportHints().tcpNoDelay() );
 }
 
 void StateManager::initAsctecManager()
