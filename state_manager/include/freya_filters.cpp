@@ -1,7 +1,15 @@
-/* Aj's classy filter library */
+/* Aj's classy filter library.
+This implements a set of commonly used data filters, each suited for
+its own purpose. An instance of this class can be created anywhere
+(usually in state managers), and the object is passed the vector to be
+filtered. The vector (and shuffling) is *not* maintained by this class!
+That is: no previous data memory is held here, the implementation is
+re-entrant (strictly Markovian, in this respect). Only the filter
+properties (coeffs, type, len. etc) are held here.
+*/
 
-#ifndef AJ_FILTER_COLLECTION_H
-#define AJ_FILTER_COLLECTION_H
+#ifndef FREYJA_FILTER_COLLECTION_H
+#define FREYJA_FILTER_COLLECTION_H
 
 #include <ros/ros.h>
 #include <vector>
@@ -11,7 +19,7 @@
 
 const int MEDIAN_FILTER_LEN = 13;
 const int MEDIAN_IDX = 6;
-class AjFilterCollection
+class FreyjaFilters
 {
   /* Only instantiate the filter once per object. This prevents having to check
   the filter type every time the filter function is called */
@@ -23,11 +31,11 @@ class AjFilterCollection
   bool using_conv_filters_;
   
   /* For median filter */
-//  const int MEDIAN_FILTER_LEN = 13;
-//  const int MEDIAN_IDX = MEDIAN_FILTER_LEN/2;
+  //  const int MEDIAN_FILTER_LEN = 13;
+  //  const int MEDIAN_IDX = MEDIAN_FILTER_LEN/2;
   StaticSort<MEDIAN_FILTER_LEN> sorter_instance_;
-  std::vector<double> unsorted_temp; //( MEDIAN_FILTER_LEN );
-  
+  std::vector<double> unsorted_temp;
+
   void initGaussianFilter( const std::vector<double> &fc, const int &len )
   {
     /* For the moment there is no scope of "automatically" doing this using
@@ -80,13 +88,11 @@ class AjFilterCollection
         weight_scaler_ += ((idx+1)*(idx+1)*(idx+1)/(win*window_size));
       }
     }
-    //for( int idx = 0; idx < window_size; idx++ )
-    //  std::cout << lwma_filter_coeff[idx] << " ";
   }
-  
+
   void initMedianFilter( )
   {
-    /*                      !! Experimental
+    /*
       Use a constant time sorting network that is constructed at compile-time
       to sort a fixed-length vector. The algorithm's template instantiation is
       all copy-pasta from the internets. See static_sort.h for details & license.
@@ -95,16 +101,15 @@ class AjFilterCollection
      unsorted_temp.resize( MEDIAN_FILTER_LEN );
      ROS_WARN( "Median filter init! Length: %d", filter_len_ );
   }
-  
+
   public:
     /* Filter instantiation needs the length of the filter and the name.
       Sometimes a filter may have additional type as a string argument,
       or the object may pass in the coeffs that it wants to use.  */
-    //AjFilterCollection( const int&, const std::string& );
-    AjFilterCollection();
-    AjFilterCollection( const int&, const std::string&, const std::string&,
+
+    FreyjaFilters();
+    FreyjaFilters( const int&, const std::string&, const std::string&,
                         const std::vector<double> );
-    //AjFilterCollection( const int&, const std::string&, const std::vector<double>& );
 
     int getCurrentFilterLen();
     void filterObservations( const std::vector<double> &obs, double &retVal );
@@ -116,17 +121,17 @@ class AjFilterCollection
                                              double &retVal3 );
 };
 
-AjFilterCollection::AjFilterCollection( )
+FreyjaFilters::FreyjaFilters( )
 {
-  /* Perhaps a median filter uses this function call style? */
+  /* Perhaps a default filter uses this function call style? */
 }
 
-AjFilterCollection::AjFilterCollection( const int& len, const std::string &f_name,
-                                        const std::string &f_type,
-                                        const std::vector<double> coeffs = {0} )
+FreyjaFilters::FreyjaFilters( const int& len, const std::string &f_name,
+                              const std::string &f_type,
+                              const std::vector<double> coeffs = {0} )
 {
   bool filter_initialised = false;
-  
+
   /* Check for the name and the type */
   if( f_name == "lwma" )
   {
@@ -134,33 +139,33 @@ AjFilterCollection::AjFilterCollection( const int& len, const std::string &f_nam
       using_conv_filters_ = true;
       filter_initialised = true;
   }
-      
+
   if( f_name == "gauss" )
   {
     if( coeffs.size() == 1 )
     {
       /* Init default filter: mean 10, stddev = 5 */
+      ROS_WARN( "[FILTER]: No coeffs given for Gaussian. Picking defaults: len=21, stddev=5." );
       int len = 21;
       std::vector<double> fc = { 0.0108, 0.0158, 0.0222, 0.0299, 0.0388, 0.0484, 
                                 0.0579, 0.0666, 0.0737, 0.0782, 0.0798, 0.0782,
                                 0.0737, 0.0666, 0.0579, 0.0484, 0.0388, 0.0299,
                                 0.0222, 0.0158, 0.0108};
       initGaussianFilter( fc, len );
-      ROS_WARN( "No coeffs for Gaussian. Picking defaults." );
     }
     else
       initGaussianFilter( coeffs, len );
-    
+
     using_conv_filters_ = true;
     filter_initialised = true;
    }
 
   if( f_name == "woltring" )
   {
-    /* @TODO: implement this if you can */
-    ROS_ERROR( "Woltring filter not implemented in this function call!" );
-    AjFilterCollection( -1, "median", "~" );
-    
+    /* @TODO: implement this .. */
+    ROS_ERROR( "Woltring filter not implemented in this function call! Picking median-filter." );
+    FreyjaFilters( -1, "median", "~" );
+
     using_conv_filters_ = false;
     filter_initialised = true;
   }
@@ -171,13 +176,13 @@ AjFilterCollection::AjFilterCollection( const int& len, const std::string &f_nam
     using_conv_filters_ = false;
     filter_initialised = true;
   }
-  
+
   if( !filter_initialised )
     ROS_ERROR( "Filter not initialized: %s", f_name.c_str() );
 }
 
-void AjFilterCollection::filterObservations( const std::vector<double> &obs,
-                                             double &retVal )
+void FreyjaFilters::filterObservations( const std::vector<double> &obs,
+                                        double &retVal )
 {
   if( using_conv_filters_ )
   {
@@ -199,12 +204,12 @@ void AjFilterCollection::filterObservations( const std::vector<double> &obs,
   }
 }
 
-void AjFilterCollection::filterObservations( const std::vector<double> &obs1, 
-                                             const std::vector<double> &obs2, 
-                                             const std::vector<double> &obs3, 
-                                             double &retVal1,
-                                             double &retVal2,
-                                             double &retVal3 )
+void FreyjaFilters::filterObservations( const std::vector<double> &obs1, 
+                                        const std::vector<double> &obs2, 
+                                        const std::vector<double> &obs3, 
+                                        double &retVal1,
+                                        double &retVal2,
+                                        double &retVal3 )
 {
   if( using_conv_filters_ )
   {
@@ -255,7 +260,7 @@ void AjFilterCollection::filterObservations( const std::vector<double> &obs1,
   }
 }
 
-int AjFilterCollection::getCurrentFilterLen()
+int FreyjaFilters::getCurrentFilterLen()
 {
   return filter_len_;
 }

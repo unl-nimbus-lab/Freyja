@@ -13,20 +13,20 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <sensor_msgs/NavSatFix.h>
-#include <common_msgs/CurrentState.h>
-#include <common_msgs/AsctecData.h>
 #include <nav_msgs/Odometry.h>
+#include <tf/tf.h>
 
-#include "aj_filter_collection.cpp"
-//#if USE_VICON_ == 1
-  #include <tf/tf.h>
-//#endif
+#include <freyja_msgs/CurrentState.h>
+#include <freyja_msgs/AsctecData.h>
+
+#include "freyja_filters.cpp"
 
 typedef geometry_msgs::TransformStamped TFStamped;
 typedef geometry_msgs::TwistStamped TwStamped;
 typedef nav_msgs::Odometry CameraOdom;
+
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
-#define AJ_PI 3.14153
+#define F_PI 3.14153
 
 /* The full state vector is defined as:
   [ pn, pe, pd, vn, ve, vd, roll, pitch, yaw, roll_rate_, pitch_rate_, yaw_rate_ ]
@@ -66,8 +66,8 @@ class StateManager
   /* Filter-specific details for computing velocity */
   int filter_len_;
   std::string filter_type_;
-  AjFilterCollection pose_filter_;
-  AjFilterCollection rate_filter_;
+  FreyjaFilters pose_filter_;
+  FreyjaFilters rate_filter_;
   
   double home_lat_, home_lon_;
   bool have_location_fix_;

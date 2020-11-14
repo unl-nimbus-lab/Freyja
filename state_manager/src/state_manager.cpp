@@ -1,6 +1,5 @@
 
 #include "state_manager.h"
-//#include "aj_filter_collection.cpp"
 #include "callback_implementations.cpp"
 
 #define ROS_NODE_NAME "state_manager"
@@ -48,22 +47,22 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
     else if( filter_len_ == 5 )
       fc = { 0.1534,	0.2214,	0.2504,	0.2214,	0.1534 };
 
-    pose_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );
-    rate_filter_ = AjFilterCollection( filter_len_, "gauss", "~", fc );
+    pose_filter_ = FreyjaFilters( filter_len_, "gauss", "~", fc );
+    rate_filter_ = FreyjaFilters( filter_len_, "gauss", "~", fc );
     ROS_INFO( "Gaussian filter init!" );
   }
   else if( filter_type_ == "lwma" )
   {
     /* The init function automatically fills in the coeffs for lwma */
     //filter_len_ = 20;
-    pose_filter_ = AjFilterCollection( filter_len_, "lwma", "cubic" );
-    rate_filter_ = AjFilterCollection( filter_len_, "lwma", "cubic" );
+    pose_filter_ = FreyjaFilters( filter_len_, "lwma", "cubic" );
+    rate_filter_ = FreyjaFilters( filter_len_, "lwma", "cubic" );
     ROS_INFO( "LWMA filter init!" );
   }
   else if( filter_type_ == "median" )
   {
-    pose_filter_ = AjFilterCollection( -1, "median", "~" );
-    rate_filter_ = AjFilterCollection( -1, "median", "~" );
+    pose_filter_ = FreyjaFilters( -1, "median", "~" );
+    rate_filter_ = FreyjaFilters( -1, "median", "~" );
     filter_len_ = pose_filter_.getCurrentFilterLen();
   }
   
@@ -81,7 +80,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
 
 void StateManager::initViconManager()
 {
-  std::string vicon_topic( "/vicon/ARGENTINA/ARGENTINA" );
+  std::string vicon_topic( "/vicon/FENRIR/FENRIR" );
   priv_nh_.param( "vicon_object", vicon_topic, vicon_topic );
 
   /* Associate vicon callback */

@@ -2,7 +2,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
 {
   /* Handle most of the state information directly, except for velocity
     and that needs to be computed after filtering positions */
-    
+  
   /* Note that Vicon gives us ENU, while we use NED */
   
   double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
@@ -19,9 +19,6 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   prev_pd_.erase( prev_pd_.begin() );
   prev_pd_.push_back( z );
 
-  //AjFilterCollection::filterObservations( filter_type_, prev_pn_, x );
-  //AjFilterCollection::filterObservations( filter_type_, prev_pe_, y );
-  //AjFilterCollection::filterObservations( filter_type_, prev_pd_, z );
   pose_filter_.filterObservations( prev_pn_, prev_pe_, prev_pd_, x, y, z );
 
   /* positions */
@@ -40,10 +37,9 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   prev_ve_.push_back( vy );
   prev_vd_.erase( prev_vd_.begin() );
   prev_vd_.push_back( vz );
-  //AjFilterCollection::filterObservations( filter_type_, prev_vn_, vx );
-  //AjFilterCollection::filterObservations( filter_type_, prev_ve_, vy );
-  //AjFilterCollection::filterObservations( filter_type_, prev_vd_, vz );
+
   rate_filter_.filterObservations( prev_vn_, prev_ve_, prev_vd_, vx, vy, vz );
+
   state_vector_[3] = vx;
   state_vector_[4] = vy;
   state_vector_[5] = vz;
@@ -95,6 +91,7 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
     have_location_fix_ = true;
     home_lat_ = (msg -> best_lat)/10000000.0;
     home_lon_ = (msg -> best_lon)/10000000.0;
+    ROS_INFO( "[StateManager]: Asctec: Home location set!" );
   }
   
   if( !have_location_fix_ )
@@ -114,11 +111,7 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
   prev_vd_.erase( prev_vd_.begin() );
   prev_vd_.push_back( vz );
   rate_filter_.filterObservations( prev_vn_, prev_ve_, prev_vd_, vx, vy, vz );
-  /*
-  AjFilterCollection::filterObservations( "gauss", prev_pn_, x );
-  AjFilterCollection::filterObservations( "gauss", prev_pe_, y );
-  AjFilterCollection::filterObservations( "gauss", prev_pd_, z );
-  */
+
   /* positions */
   state_vector_[0] = x;
   state_vector_[1] = y;
@@ -133,7 +126,7 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
   state_vector_[6] = (msg -> roll_angle)/1000.0;
   state_vector_[7] = (msg -> pitch_angle)/1000.0;
   double yaw_c = DEG2RAD( (msg -> yaw_angle)/1000.0 );
-  state_vector_[8] = ( yaw_c > AJ_PI )? yaw_c - 2*AJ_PI : yaw_c;
+  state_vector_[8] = ( yaw_c > F_PI )? yaw_c - 2*F_PI : yaw_c;
   
   /* rpy rates */
   state_vector_[9] = 0.0;
@@ -167,13 +160,14 @@ void StateManager::mavrosGpsCallback( const sensor_msgs::NavSatFix::ConstPtr& ms
     home_lat_ = msg -> latitude;
     home_lon_ = msg -> longitude;
     have_location_fix_ = true;
+    ROS_INFO( "[StateManager]: APM: Home location set!" );
   }
   else
     return;
-    
+
   state_vector_[0] = ( (msg->latitude)/10000000.0 - home_lat_ )*111050.51;
   state_vector_[1] = ( (msg->longitude)/10000000.0 - home_lon_ )*84356.28;
-  
+
 }
 
 void StateManager::mavrosGpsVelCallback( const TwStamped::ConstPtr &msg )
