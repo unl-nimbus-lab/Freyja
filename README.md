@@ -1,0 +1,14 @@
+# Freyja
+High-level flight stack for precise multirotor control, designed and used extensively in the Nimbus Lab.
+
+Freyja bundles ROS packages that implement fast and accurate state estimators, an optimal feedback controller (LQR/LQG), and generalized interfaces for common autopilots that make it suitable for several precise and aggressive flight manuevers. The implementation uses standard control-systems style and terminology, and follows a conventional ROS architecture, thereby making it easy to substitute custom controllers, observers and communication interfaces. Freyja can remain oblivious to the specific _type_ of multirotor as long as the onboard autopilot can stabilize its attitude accurately, and can exploit differentially-flat trajectory planning methods to support feed-forward elements in the controller. Agile and precise flights can be performed _outdoors,_ even under high wind conditions, when bias compensation and RTK GPS integration is enabled.
+
+## Overview
+Freyja is a collection of four primary ROS packages:
+- `state_manager` : interfaces several input data sources (motion capture, gps, camera estimate) to produce one `state_vector` [denoted **x** in typical control schemes]. Some parts of state_vector are calculated (such as velocity), and some are merged from different callbacks. Also implements a collection of commonly used filters (Gaussian, LWMA, Median ..)
+- `lqg_control`   : the core controller node that takes **x** from `state_manager`, a reference state **x<sub>r</sub>**, and calculates the optimal control required to regulate **x** to **x<sub>r</sub>**. Implements a standard LQR controller and a full state observer (Kalman) to function as a Linear Quadratic Gaussian (LQG) controller.
+- `autopilot_handler` : contains communication interfaces to autopilots. Currently supported autopilots are Pixhawk (with ArduCopter stack, px4 experimental) and Ascending Technologies.
+- `freyja_trajectory_provider`  : an example trajectory provider node that produces **x<sub>r</sub>**. In common use, this is typically suppressed (using a launch argument), and users will write their own custom trajectory node that represents their particular flight objectives. It is possible for **x<sub>r</sub>** to be simple discrete waypoints, piecewise continuous paths, or the product of an advanced trajectory planner that incorporates spatial and temporal shapes of trajectories. Path derivatives up to the 2nd order are supported.
+
+## License, Credits and Usage
+Freyja is developed in the [Nimbus Lab](https://nimbus.unl.edu), with rigorous testing under a multitude of operational scenarios and is used internally for various projects. Generous thanks to members who have tested and reported bugs, issues and feature limitations. The software is public under the GNU GPLv3 license. Please use wisely, and recommend improvements!
