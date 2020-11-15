@@ -22,7 +22,7 @@ StateEstimator::StateEstimator() : nh_(), priv_nh_("~")
   std::string output_topic;
   priv_nh_.param( "output_topic", output_topic, std::string("/current_state_estimate") );
   // for when all is said and done
-  state_pub_ = nh_.advertise <common_msgs::CurrentStateBiasFree>
+  state_pub_ = nh_.advertise <freyja_msgs::CurrentStateBiasFree>
                   ( output_topic, 1, true );
  
   int estimator_rate_default = 70;
@@ -261,7 +261,7 @@ void StateEstimator::medianFilter()
   */
 }
 
-void StateEstimator::stateUpdatesCallback( const common_msgs::CurrentState::ConstPtr & msg )
+void StateEstimator::stateUpdatesCallback( const freyja_msgs::CurrentState::ConstPtr & msg )
 {
 
   // no need to mutexify this, since measurement_z_ is only used in update function

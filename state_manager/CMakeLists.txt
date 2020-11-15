@@ -16,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   geometry_msgs
-  common_msgs
+  freyja_msgs
   sensor_msgs
   nav_msgs
 )

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(common_msgs)
+project(freyja_msgs)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -53,7 +53,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES common_msgs
+#  LIBRARIES freyja_msgs
 #  CATKIN_DEPENDS geometry_msgs message_generation message_runtime roscpp std_msgs
 #  DEPENDS system_lib
 )

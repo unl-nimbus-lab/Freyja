@@ -86,7 +86,7 @@ class StateManager
 
     /* Callback handler for asctec_onboard_data */
     ros::Subscriber asctec_data_sub_;
-    void asctecDataCallback( const common_msgs::AsctecData::ConstPtr & );
+    void asctecDataCallback( const freyja_msgs::AsctecData::ConstPtr & );
 
     /* Callback handlers for mavros data */
     ros::Subscriber mavros_gps_sub_;

@@ -29,7 +29,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
 
 
   /* Announce state publisher */
-  state_pub_ = nh_.advertise <common_msgs::CurrentState>
+  state_pub_ = nh_.advertise <freyja_msgs::CurrentState>
                   ( "current_state", 1, true ); 
   
   /* Instantiate filters. Useful for vicon. Autopilots have their own filters */                

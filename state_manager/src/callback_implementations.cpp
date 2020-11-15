@@ -74,14 +74,14 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   last_yaw_ = yaw;
   
   /* Copy over and publish right away */
-  common_msgs::CurrentState state_msg;
+  freyja_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];
   state_pub_.publish( state_msg );
 }
 
-void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &msg )
+void StateManager::asctecDataCallback( const freyja_msgs::AsctecData::ConstPtr &msg )
 {
   double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
   double x, y, z, vx, vy, vz;
@@ -145,7 +145,7 @@ void StateManager::asctecDataCallback( const common_msgs::AsctecData::ConstPtr &
   last_pd_ = state_vector_[2];
   
   /* Copy over and publish right away */
-  common_msgs::CurrentState state_msg;
+  freyja_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];
@@ -185,7 +185,7 @@ void StateManager::mavrosGpsVelCallback( const TwStamped::ConstPtr &msg )
   
   lastUpdateTime_ = ros::Time::now();
 
-  common_msgs::CurrentState state_msg;
+  freyja_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];
@@ -253,7 +253,7 @@ void StateManager::cameraUpdatesCallback( const CameraOdom::ConstPtr &msg )
   state_vector_[8] = yaw;
 
   // publish away!
-  common_msgs::CurrentState state_msg;
+  freyja_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];

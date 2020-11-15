@@ -23,15 +23,15 @@
 #include <sensor_msgs/NavSatFix.h>
 #include <nav_msgs/Odometry.h>
 
-#include <common_msgs/CurrentState.h>
-#include <common_msgs/CurrentStateEst.h>
-#include <common_msgs/AsctecData.h>
-#include <common_msgs/ControllerDebug.h>
+#include <freyja_msgs/CurrentState.h>
+#include <freyja_msgs/CurrentStateEst.h>
+#include <freyja_msgs/AsctecData.h>
+#include <freyja_msgs/ControllerDebug.h>
 
 
 #include "aj_filter_collection.cpp"
 
-typedef common_msgs::ControllerDebug::ConstPtr LqrInputAccel;
+typedef freyja_msgs::ControllerDebug::ConstPtr LqrInputAccel;
 
 #if LQE_INTEGRATOR_ORDER_ == 2
   const int nStates = 9;
@@ -80,7 +80,7 @@ class StateEstimator
   std::chrono::duration<double> prop_interval_;
 
   // final ros data published
-  common_msgs::CurrentStateBiasFree state_msg_;
+  freyja_msgs::CurrentStateBiasFree state_msg_;
   
   public:
     StateEstimator();
@@ -90,7 +90,7 @@ class StateEstimator
 
     // listen to state information from an external source
     ros::Subscriber state_sub_;
-    void stateUpdatesCallback( const common_msgs::CurrentState::ConstPtr & );
+    void stateUpdatesCallback( const freyja_msgs::CurrentState::ConstPtr & );
 
     // listen to full control commands (atti + accel) from the controller
     ros::Subscriber ctrl_input_sub_;
