@@ -15,7 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 
 catkin_package(
-  INCLUDE_DIRS include
+#  INCLUDE_DIRS include
 #  LIBRARIES trajectory_provider
   CATKIN_DEPENDS geometry_msgs message_generation message_runtime roscpp std_msgs
 #  DEPENDS system_lib

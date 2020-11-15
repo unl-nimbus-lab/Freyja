@@ -36,7 +36,7 @@ double THRUST_MIN = 0.02;
 double THRUST_SCALER = 200.0;
 
 typedef mavros_msgs::AttitudeTarget AttiTarget;
-typedef common_msgs::CtrlCommand::ConstPtr CtrlInput;
+typedef freyja_msgs::CtrlCommand::ConstPtr CtrlInput;
 
 uint8_t ignore_rates = AttiTarget::IGNORE_ROLL_RATE |
                         AttiTarget::IGNORE_PITCH_RATE; // |

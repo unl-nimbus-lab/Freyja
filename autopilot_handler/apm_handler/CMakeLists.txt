@@ -5,7 +5,7 @@ project(apm_handler)
 add_compile_options(-std=c++11 -O3)
 
 find_package(catkin REQUIRED COMPONENTS
-  common_msgs
+  freyja_msgs
   geometry_msgs
   roscpp
   std_msgs
@@ -16,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES apm_handler
-#  CATKIN_DEPENDS common_msgs geometry_msgs roscpp std_msgs tf
+#  CATKIN_DEPENDS freyja_msgs geometry_msgs roscpp std_msgs tf
 #  DEPENDS system_lib
 )
 
