@@ -18,23 +18,23 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <std_srvs/SetBool.h>
 
-#include <common_msgs/CurrentState.h>
-#include <common_msgs/CtrlCommand.h>
-#include <common_msgs/ControllerDebug.h>
-#include <common_msgs/ReferenceState.h>
+#include <freyja_msgs/CurrentState.h>
+#include <freyja_msgs/CtrlCommand.h>
+#include <freyja_msgs/ControllerDebug.h>
+#include <freyja_msgs/ReferenceState.h>
 
 #include <eigen3/Eigen/Dense>
 
 #include "bias_estimator.h"
 
-typedef common_msgs::ReferenceState TrajRef;
+typedef freyja_msgs::ReferenceState TrajRef;
 typedef std_srvs::SetBool::Request BoolServReq;
 typedef std_srvs::SetBool::Response BoolServRsp;
 
 class LQRController
 {
   ros::NodeHandle nh_, priv_nh_;
-  common_msgs::CurrentState state_vector_;
+  freyja_msgs::CurrentState state_vector_;
   Eigen::Matrix<double, 7, 1> reduced_state_;
   
   /* Reference state vector */
@@ -74,7 +74,7 @@ class LQRController
     void initLqrSystem();
     
     ros::Subscriber state_sub_;
-    void stateCallback( const common_msgs::CurrentState::ConstPtr & );
+    void stateCallback( const freyja_msgs::CurrentState::ConstPtr & );
     
     ros::ServiceServer bias_enable_serv_;
     bool biasEnableServer( BoolServReq&, BoolServRsp& );

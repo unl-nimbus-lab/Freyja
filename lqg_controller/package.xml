@@ -1,16 +1,16 @@
 <?xml version="1.0"?>
 <package>
-  <name>lqr_control</name>
+  <name>lqg_control</name>
   <version>0.1.0</version>
-  <description>The lqr_control package</description>
+  <description>The lqg_control package</description>
 
   <maintainer email="ashankar@cse.unl.edu">aj</maintainer>
-  <license>Risky</license>
+  <license>GPLv3</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>roscpp</build_depend>
-  <build_depend>common_msgs</build_depend>
+  <build_depend>freyja_msgs</build_depend>
   <build_depend>cmake_modules</build_depend>
   <build_depend>Eigen3</build_depend>
   

@@ -21,7 +21,7 @@ BiasEstimator::BiasEstimator() : nh_(), priv_nh_("~")
   std::string output_topic;
   priv_nh_.param( "estimator_debug_topic", output_topic,
                   std::string("/bias_estimates") );
-  bias_pub_ = nh_.advertise <common_msgs::CurrentStateBiasEst>
+  bias_pub_ = nh_.advertise <freyja_msgs::CurrentStateBiasEst>
                               ( output_topic, 1, true );
 
   /* Parameters for thread */
@@ -36,7 +36,7 @@ BiasEstimator::BiasEstimator() : nh_(), priv_nh_("~")
   /* ROS timers are pretty much unreliable for "high" rates. Don't use:
     estimator_timer_ = nh_.createTimer( ros::Duration(estimator_period),
                                         &BiasEstimator::state_propagation, this );
-                                        
+  
     Use thread libraries instead:
   */
 
@@ -181,8 +181,6 @@ void BiasEstimator::setMeasurement( const Eigen::Matrix<double, 6, 1> &m )
 {
   measurement_z_ = m;
   state_updation();
-//  st_upd_thread_ = std::thread( &BiasEstimator::state_updation, this );
-//  st_upd_thread_.detach();
 }
 
 void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c )
@@ -191,11 +189,8 @@ void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c )
     ctrl_input_u_[0] = c[0];
     ctrl_input_u_[1] = c[1];
     ctrl_input_u_[2] = c[2] + 9.81;
-    /* smooth input control artificially for 1 time step */
-    //ctrl_input_u_ = (ctrl_input_u_ + prev_ctrl_input_)/2.0;
     n_stprops_since_update_ = 0;
   state_prop_mutex_.unlock();
-  //prev_ctrl_input_ = ctrl_input_u_;
 }
 void BiasEstimator::getEstimatedBiases( Eigen::Matrix<double, 3, 1> &eb )
 {

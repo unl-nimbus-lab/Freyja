@@ -8,10 +8,9 @@
    -- aj / 17th Nov, 2017.
 */
 
-#include "lqr_control_bias.h"
-//#include "bias_estimator.h"
+#include "lqg_control_bias.h"
 
-#define ROS_NODE_NAME "lqr_control"
+#define ROS_NODE_NAME "lqg_control"
 #define pi 3.1416
 
 LQRController::LQRController(BiasEstimator &b) : nh_(),
@@ -41,11 +40,11 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   bias_enable_serv_ = nh_.advertiseService( "/set_bias_compensation",
                               &LQRController::biasEnableServer, this );
   /* Announce publisher for controller output */
-  atti_cmd_pub_ = nh_.advertise <common_msgs::CtrlCommand>
+  atti_cmd_pub_ = nh_.advertise <freyja_msgs::CtrlCommand>
                     ( "/rpyt_command", 1, true );
-  controller_debug_pub_ = nh_.advertise <common_msgs::ControllerDebug>
+  controller_debug_pub_ = nh_.advertise <freyja_msgs::ControllerDebug>
                     ( "/controller_debug", 1, true );
-                    
+
   /* Timer to run the LQR controller perdiodically */
   float controller_period = 1.0/controller_rate_;
   controller_timer_ = nh_.createTimer( ros::Duration(controller_period),
@@ -109,7 +108,7 @@ double LQRController::calcYawError( const double &a, const double &b )
   return yd-pi; 
 }
 
-void LQRController::stateCallback( const common_msgs::CurrentState::ConstPtr &msg )
+void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &msg )
 {
   /* Parse message to obtain state and reduced state information */
   const double *msgptr = msg -> state_vector.data();
@@ -204,7 +203,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   }
   
   /* Debug information */
-  common_msgs::ControllerDebug debug_msg;
+  freyja_msgs::ControllerDebug debug_msg;
   debug_msg.header.stamp = ros::Time::now();
   debug_msg.lqr_u[0] = control_input(0);
   debug_msg.lqr_u[1] = control_input(1);
@@ -218,7 +217,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   controller_debug_pub_.publish( debug_msg );
   
   /* Actual commanded input */
-  common_msgs::CtrlCommand ctrl_cmd;
+  freyja_msgs::CtrlCommand ctrl_cmd;
   ctrl_cmd.roll = roll;
   ctrl_cmd.pitch = pitch;
   ctrl_cmd.yaw = yaw;

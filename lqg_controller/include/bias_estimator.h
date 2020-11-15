@@ -16,7 +16,7 @@
 #include <ros/ros.h>
 #include <eigen3/Eigen/Dense>
 
-#include <common_msgs/CurrentStateBiasEst.h>
+#include <freyja_msgs/CurrentStateBiasEst.h>
 
 typedef std::chrono::microseconds uSeconds;
 
@@ -67,7 +67,7 @@ class BiasEstimator
   std::chrono::duration<double> prop_interval_;
 
   /* final ros data published */
-  common_msgs::CurrentStateBiasEst state_msg_;
+  freyja_msgs::CurrentStateBiasEst state_msg_;
   public:
     BiasEstimator();
     ~BiasEstimator();

@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 2.8.3)
 #cmake_minimum_required(VERSION 3.1.0)
-project(lqr_control)
+project(lqg_control)
 set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wall" )
 
 
 find_package(catkin REQUIRED COMPONENTS
   message_generation
   roscpp
-  common_msgs
+  freyja_msgs
   cmake_modules
 )
 #pkg_search_module( Eigen3 REQUIRED eigen3 )
@@ -28,7 +28,7 @@ endif()
 
 catkin_package(
   INCLUDE_DIRS include
-#  LIBRARIES lqr_control
+#  LIBRARIES lqg_control
   CATKIN_DEPENDS Eigen3 message_generation roscpp
   DEPENDS Eigen
 )
@@ -44,9 +44,9 @@ include_directories(
 )
 
 # lqr with bias estimator 
-add_executable(lqr_control_node src/lqr_control_bias.cpp src/bias_estimator.cpp)
-add_dependencies(lqr_control_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(lqr_control_node
+add_executable(lqg_control_node src/lqg_control_bias.cpp src/bias_estimator.cpp)
+add_dependencies(lqg_control_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(lqg_control_node
    ${catkin_LIBRARIES}
  )
 
