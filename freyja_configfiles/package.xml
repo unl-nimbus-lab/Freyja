@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <package>
-  <name>pixhawk_defaults</name>
+  <name>freyja_configfiles</name>
   <version>0.1.0</version>
-  <description>The pixhawk_defaults package</description>
+  <description>The freyja_configfiles package</description>
 
   <maintainer email="ashankar@cse.unl.edu">aj</maintainer>
-  <license>Risky</license>
+  <license>GPLv3</license>
 
   <buildtool_depend>catkin</buildtool_depend>
 

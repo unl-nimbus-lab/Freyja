@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-  <name>trajectory_provider</name>
+  <name>freyja_trajectory_provider</name>
   <version>0.0.0</version>
   <description>The trajectory_provider package</description>
 
@@ -9,14 +9,14 @@
   <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
   <maintainer email="aj@todo.todo">aj</maintainer>
 
-  <license>TODO</license>
+  <license>GPLv3</license>
 
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>roscpp</build_depend>
-  <build_depend>common_msgs</build_depend>
+  <build_depend>freyja_msgs</build_depend>
   <build_depend>std_msgs</build_depend>
   
   <run_depend>geometry_msgs</run_depend>

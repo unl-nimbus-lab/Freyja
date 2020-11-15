@@ -44,7 +44,7 @@ include_directories(
 )
 
 # lqr with bias estimator 
-add_executable(lqg_control_node src/lqg_control_bias.cpp src/bias_estimator.cpp)
+add_executable(lqg_control_node src/lqr_control_bias.cpp src/bias_estimator.cpp)
 add_dependencies(lqg_control_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(lqg_control_node
    ${catkin_LIBRARIES}

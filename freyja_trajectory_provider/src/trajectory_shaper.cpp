@@ -4,15 +4,15 @@
 #include <numeric>
 #include <ros/ros.h>
 #include <std_msgs/UInt8.h>
-#include <common_msgs/ReferenceState.h>
-#include <common_msgs/CurrentState.h>
-#include <common_msgs/TrajectoryDebug.h>
+#include <freyja_msgs/ReferenceState.h>
+#include <freyja_msgs/CurrentState.h>
+#include <freyja_msgs/TrajectoryDebug.h>
 
 #include "utilities.cpp"
 
 #define ROS_NODE_NAME "trajectory_shaper"
-typedef common_msgs::ReferenceState TrajRef;
-typedef common_msgs::TrajectoryDebug TrajDebug;
+typedef freyja_msgs::ReferenceState TrajRef;
+typedef freyja_msgs::TrajectoryDebug TrajDebug;
 
 enum class SystemState
 {
@@ -46,7 +46,7 @@ void update_approach_location();
 void hover_trajectory( TrajRef& );
 void approach_trajectory( TrajRef& );
 
-void stateCallback( const common_msgs::CurrentState::ConstPtr &msg )
+void stateCallback( const freyja_msgs::CurrentState::ConstPtr &msg )
 {
   static int obs_idx = 0;
   

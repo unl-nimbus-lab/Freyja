@@ -1,5 +1,7 @@
 /* Provides a trajectory for the vehicle to follow.
 
+  EXAMPLE FILE; ONLY FOR SUPPORT.
+
   Whatever you do here, output a time-based continous function to follow.
   This node should generate a 7 vector: [pn pe pd vn ve vd yaw]' for the vehicle
   to follow. The controller currently listens to this reference trajectory
@@ -10,10 +12,10 @@
 #include <cmath>
 #include <ros/ros.h>
 #include <std_msgs/UInt8.h>
-#include <common_msgs/ReferenceState.h>
+#include <freyja_msgs/ReferenceState.h>
 
 #define ROS_NODE_NAME "trajectory_provider"
-typedef common_msgs::ReferenceState TrajRef;
+typedef freyja_msgs::ReferenceState TrajRef;
 
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
 
@@ -46,6 +48,7 @@ TrajRef getHoverReference( const ros::Duration &cur_time )
   ref_state.header.stamp = ros::Time::now();
   return ref_state;
 }
+
 // CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
 TrajRef getCircleReference( const ros::Duration &cur_time )
 {

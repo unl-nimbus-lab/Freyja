@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(trajectory_provider)
+project(freyja_trajectory_provider)
 set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3" )
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
-#  message_runtime
   roscpp
-  common_msgs
+  freyja_msgs
   std_msgs
 )
 
@@ -40,9 +40,9 @@ target_link_libraries(trajectory_provider_node
 
 
 # vision-based guidance for approach
-add_executable(trajectory_shaper_node src/trajectory_shaper.cpp)
-add_dependencies(trajectory_shaper_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_executable(trajectory_shaper_node src/trajectory_shaper.cpp)
+# add_dependencies(trajectory_shaper_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(trajectory_shaper_node
-   ${catkin_LIBRARIES}
- )
+# target_link_libraries(trajectory_shaper_node
+#   ${catkin_LIBRARIES}
+# )
