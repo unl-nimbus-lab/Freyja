@@ -8,9 +8,9 @@
 	-->
 
 	<!-- allowed autopilots: "asctec" or "arducopter" -->
-	<!-- must provide vicon_path -->
+	<!-- must provide vicon_topic -->
 	<arg name="autopilot" default="arducopter"/>
-	<arg name="vicon_path"/>
+	<arg name="vicon_topic"/>
 	<!-- use "device:baudrate" for apm, "device" for asctec -->
 	<arg name="comm_port" default="/dev/ttyUSB0:57600"/>
 	<arg name="total_mass" default="0.95"/>
@@ -26,7 +26,7 @@
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
     <param name="state_source" type="string" value="vicon" />
     <param name="filter_type" type="string" value="median" />
-    <param name="vicon_path" type="string" value="$(arg vicon_path)" />
+    <param name="vicon_topic" type="string" value="$(arg vicon_topic)" />
   </node>
 
 	<!-- an example trajectory node for reference -->
