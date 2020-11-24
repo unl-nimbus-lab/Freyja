@@ -14,8 +14,8 @@
 	<arg name="blacklisted" default="['waypoint', 'vfr_hud']"/>
 
 	<include file="$(find mavros)/launch/node.launch">
-		<arg name="pluginlists_yaml" value="$(find pixhawk_defaults)/apm_pluginlists_nimbus.yaml" />
-		<arg name="config_yaml" value="$(find pixhawk_defaults)/apm_config_nimbus.yaml" />
+		<arg name="pluginlists_yaml" value="$(find freyja_configfiles)/apm_pluginlists_nimbus.yaml" />
+		<arg name="config_yaml" value="$(find freyja_configfiles)/apm_config_nimbus.yaml" />
 
 		<arg name="fcu_url" value="$(arg fcu_url)" />
 		<arg name="gcs_url" value="$(arg gcs_url)" />

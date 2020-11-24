@@ -81,7 +81,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
 void StateManager::initViconManager()
 {
   std::string vicon_topic( "/vicon/FENRIR/FENRIR" );
-  priv_nh_.param( "vicon_object", vicon_topic, vicon_topic );
+  priv_nh_.param( "vicon_topic", vicon_topic, vicon_topic );
 
   /* Associate vicon callback */
   vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
