@@ -14,6 +14,7 @@
 	<!-- use "device:baudrate" for apm, "device" for asctec -->
 	<arg name="comm_port" default="/dev/ttyUSB0:57600"/>
 	<arg name="total_mass" default="0.95"/>
+  <arg name="thrust_scalar" default="200.0"/>
 	<!-- true if providing your own trajectory source -->
 	<arg name="use_external_trajectory" default="false"/>
 	<arg name="use_velctrl_only" default="false"/>
@@ -32,14 +33,14 @@
 	<!-- an example trajectory node for reference -->
   <node name="trajectory_provider" pkg="freyja_trajectory_provider" type="trajectory_provider_node"
 				if="$(eval not use_external_trajectory)">
-		<!-- "hover", "circle", "hover2" -->
+		<!-- "hover", "circle", "aggressive_circle" -->
   	<param name="example_traj_type" type="string" value="hover"/>
-	</node>
+  </node>
   
   <!-- control node (see velctrl flag above) -->
   <node name="lqg_controller" pkg="lqg_control" type="lqg_control_node"
   			output="screen" if="$(eval not use_velctrl_only)">
-		<param name="controller_rate" value="45" type="int" />
+		<param name="controller_rate" type="int" value="45"  />
   	<param name="total_mass" type="double" value="$(arg total_mass)"/>
   	<param name="use_stricter_gains" type="bool" value="false" />
   	<param name="estimator_rate" type="int" value="70" />
@@ -49,7 +50,7 @@
   <node name="lqr_vel_controller" pkg="lqr_control" type="lqr_vel_ctrl_node"
   			if="$(eval use_velctrl_only)">
     <param name="controller_rate" type="int" value="30" />
-    <param name="total_mass" value="$(arg total_mass)" type="double" />
+    <param name="total_mass" type="double" value="$(arg total_mass)" />
   </node>
 
   <!-- autopilot communication node -->
@@ -60,7 +61,9 @@
   
   <!-- apm/px4 needs a handler for translation, plus a mavros node -->
   <group if="$(eval autopilot=='arducopter')">
-  	<node name="apm_handler" pkg="apm_handler" type="apm_handler_node" />
+  	<node name="apm_handler" pkg="apm_handler" type="apm_handler_node" >
+      <param name="thrust_scaler" type="double" value="$(arg thrust_scalar)" />
+    </node>
   	<include file="$(find freyja_configfiles)/apm_nimbus.launch">
   		<arg name="fcu_url" value="$(arg comm_port)"/>
   	</include>

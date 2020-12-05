@@ -2,7 +2,7 @@
 
   EXAMPLE FILE; ONLY FOR SUPPORT.
 
-  Whatever you do here, output a time-based continous function to follow.
+  Whatever you do here, output a time-based continuos function to follow.
   This node should generate a 7 vector: [pn pe pd vn ve vd yaw]' for the vehicle
   to follow. The controller currently listens to this reference trajectory
   and updates its knowledge of the "latest" reference point.
@@ -57,6 +57,28 @@ TrajRef getCircleReference( const ros::Duration &cur_time )
   float xvel, xpos;
   ref_state.header.stamp = ros::Time::now();
   
+  ref_state.pn = 0.5*std::sin( 0.5*t );
+  ref_state.pe = 0.5*std::cos( 0.5*t );
+  ref_state.pd = -1.0;
+  
+  ref_state.vn = 0.25*std::cos( 0.5*t );
+  ref_state.ve = -0.25*std::sin( 0.5*t );
+  ref_state.vd = 0.0;
+  
+  ref_state.yaw = 0.0;
+
+  // set an, ae, ad to second derivatives if needed for FF..
+  return ref_state;
+}
+
+// CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
+TrajRef getAggressiveCircleReference( const ros::Duration &cur_time )
+{
+  TrajRef ref_state;
+  float t = cur_time.toSec();
+  float xvel, xpos;
+  ref_state.header.stamp = ros::Time::now();
+  
   ref_state.pn = 1.0*std::sin( 3.0*t );
   ref_state.pe = 1.0*std::cos( 3.0*t );
   ref_state.pd = -1.0;
@@ -70,6 +92,7 @@ TrajRef getCircleReference( const ros::Duration &cur_time )
   // set an, ae, ad to second derivatives if needed for FF..
   return ref_state;
 }
+
 
 TrajRef getDefaultReference( const ros::Duration &cur_time )
 {
@@ -236,6 +259,8 @@ int main( int argc, char** argv )
     TrajRef ref_state;
     if( traj_type == "circle" )
       ref_state = getCircleReference( ros::Time::now() - init_time );
+    else if( traj_type == "aggressive_circle" )
+      ref_state = getAggressiveCircleReference( ros::Time::now() - init_time );
     else if( traj_type == "hover" )
       ref_state = getHoverReference( ros::Time::now() - init_time );
     else
