@@ -4,6 +4,13 @@ project(apm_handler)
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11 -O3)
 
+SET(NO_PIXHAWK "false" CACHE BOOL "Building Pixhawk interface handler or not?")
+
+if( NO_PIXHAWK )
+  message( AUTHOR_WARNING "\n\t\tFREYJA: Ignoring mavros interface to Pixhawk!\n" )
+  message( NOTICE "\tFREYJA: User-requested ignore apm_handler package. Please ensure alternative means of communications!\n" )
+else()
+
 find_package(catkin REQUIRED COMPONENTS
   freyja_msgs
   geometry_msgs
@@ -35,3 +42,5 @@ add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catk
 target_link_libraries(${PROJECT_NAME}_node
    ${catkin_LIBRARIES}
  )
+
+endif() # NO_PIXHAWK
