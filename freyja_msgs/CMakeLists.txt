@@ -27,6 +27,7 @@ add_message_files( #DIRECTORY msg
   asctec_handler/MotorCommand.msg
   trajectory_provider/ReferenceState.msg
   trajectory_provider/TrajectoryDebug.msg
+  trajectory_provider/WaypointTarget.msg
   lqr_ctrl/CtrlCommand.msg
   lqr_ctrl/ControllerDebug.msg
   state_manager/CurrentState.msg
