@@ -22,6 +22,7 @@ Clone the repository into the `src/` directory of your ROS workspace. Other pack
        | -- my_image_classifier/
 ```
 Run `catkin_make` or `catkin build` inside the project level directory (`my_awesome_flight_project/` in the example above). Freyja will be compiled alongside your other packages, and the build products are located within the common `build/` and `devel/` directories.
+> The default communication interface (for ArduPilot/px4) has a dependency on `mavros` (and packages it depends on), all of which you must install ([see Wiki for how-to](https://github.com/unl-nimbus-lab/Freyja/wiki)). If you'd like to circumvent this dependency (a custom interface, different autopilot etc), you can pass `-DNO_PIXHAWK` as an argument to `catkin_make`. Note that this needs you to provide some means of communicating the Freyja-generated `[roll,pitch,yaw,thrust]` commands (in respective physical SI units) to an autopilot.
 
 ## Run
 Freyja includes a `freyja_controller.launch` file that spawns the constituent nodes, and accepts commonly used parameters as launch arguments. The simplest way to launch the full system is:
