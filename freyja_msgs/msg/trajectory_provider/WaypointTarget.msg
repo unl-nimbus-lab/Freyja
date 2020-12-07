@@ -14,5 +14,7 @@ float32 allocated_time
 # use a constant speed instead of allocated_time(see flag below)
 float32 translational_speed
 
-# use or ignore the provided (constant) speed target
-int8 use_translational_speed
+# use allocated_time OR use translational_speed
+uint8 TIME  = 0
+uint8 SPEED = 1
+uint8 waypoint_mode

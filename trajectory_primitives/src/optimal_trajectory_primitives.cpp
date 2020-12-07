@@ -92,16 +92,14 @@ TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
   /* Operational constants */
   k_thresh_skipreplan_ = 0.10;       // don't replan if new point within this radius
 
-
-  init_pn_ = 3.0;
-  init_pe_ = 1.0;
-  init_pd_ = -0.5;
+  /* initial location for hover */
   priv_nh_.param( "init_pn", init_pn_, float(0.0) );
   priv_nh_.param( "init_pe", init_pe_, float(0.0) );
   priv_nh_.param( "init_pd", init_pd_, float(-2.5) );
-  
+
+  /* unused argument for trajectory shaping */
   priv_nh_.param( "term_style", terminal_style_, int(1) );
- 
+
 
   traj_alloc_duration_ = 10.0;
   traj_init_ = false;
@@ -130,13 +128,10 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
 {
   /*
     WaypointTarget:
-      [terminal_pn, terminal_pe, terminal_pd
-      terminal_vn, terminal_ve, terminal_vd
-      terminal_yaw]
+      [terminal_pn, terminal_pe, terminal_pd, terminal_vn, terminal_ve, terminal_vd, terminal_yaw]
       allocated_time
       translational_speed
-      use
-      
+      waypoint_mode (WaypointTarget::TIME=0, WaypointTarget::SPEED=1)
   */
 
   // check if the change is big enough to do a replan: final_state_: [1x6]
