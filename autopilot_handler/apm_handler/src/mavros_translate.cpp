@@ -142,14 +142,12 @@ void rc_callback( const mavros_msgs::RCIn::ConstPtr &msg )
 int main( int argc, char **argv )
 {
   ros::init( argc, argv, ROS_NODE_NAME );
-  
-  ros::NodeHandle nh;
+  ros::NodeHandle nh, priv_nh("~");
   
   /* Load parameters */
-  nh.param( "thrust_scaler", THRUST_SCALER, double(200.0) );
-  nh.param( "min_thrust_clip", THRUST_MIN, double(0.04) );
-  nh.param( "max_thrust_clip", THRUST_MAX, double(1.0) );
-  
+  priv_nh.param( "thrust_scaler", THRUST_SCALER, double(200.0) );
+  priv_nh.param( "min_thrust_clip", THRUST_MIN, double(0.04) );
+  priv_nh.param( "max_thrust_clip", THRUST_MAX, double(1.0) );
   
   atti_pub = nh.advertise <AttiTarget>
                             ( "/mavros/setpoint_raw/attitude", 1, true );

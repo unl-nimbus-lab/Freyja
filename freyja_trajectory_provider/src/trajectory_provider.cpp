@@ -2,7 +2,7 @@
 
   EXAMPLE FILE; ONLY FOR SUPPORT.
 
-  Whatever you do here, output a time-based continous function to follow.
+  Whatever you do here, output a time-based continuous function to follow.
   This node should generate a 7 vector: [pn pe pd vn ve vd yaw]' for the vehicle
   to follow. The controller currently listens to this reference trajectory
   and updates its knowledge of the "latest" reference point.
@@ -37,11 +37,11 @@ TrajRef getHoverReference( const ros::Duration &cur_time )
   TrajRef ref_state;
   ref_state.pn = 0.0;
   ref_state.pe = 0.0;
-  ref_state.pd = -1.0;
+  ref_state.pd = -0.75;
   ref_state.vn = 0.0;
   ref_state.ve = 0.0;
   ref_state.vd = 0.0;
-  ref_state.yaw = 0.0;
+  ref_state.yaw = DEG2RAD(0.0);
   ref_state.an = 0.0;
   ref_state.ae = 0.0;
   ref_state.ad = 0.0;
@@ -50,21 +50,42 @@ TrajRef getHoverReference( const ros::Duration &cur_time )
 }
 
 // CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
-TrajRef getCircleReference( const ros::Duration &cur_time )
+TrajRef getCircleReference( const ros::Duration &cur_time, const int agg_level)
 {
-  TrajRef ref_state;
+  // A is amplitude (radius); w angular rate such that 2pi/w = (seconds for one rev)
+  float A = 0.5;
+  float w = 0.5;
+
+  // Set A and w based on agg_level
+  switch(agg_level) {
+    case 1 :
+      break;
+    case 2 :
+      A = 0.5;
+      w = 1;
+      break;
+    case 3 :
+      A = 1;
+      w = 3;
+      break;
+    default :
+      ROS_WARN_STREAM("Circle aggression " << agg_level << " not supported, defaulting to agg_level 1");
+  }
+
   float t = cur_time.toSec();
-  float xvel, xpos;
+
+  // Create reference state
+  TrajRef ref_state;
   ref_state.header.stamp = ros::Time::now();
-  
-  ref_state.pn = 1.0*std::sin( 3.0*t );
-  ref_state.pe = 1.0*std::cos( 3.0*t );
+
+  ref_state.pn = A*std::sin( w*t );
+  ref_state.pe = A*std::cos( w*t );
   ref_state.pd = -1.0;
   
-  ref_state.vn = 3.0*std::cos( 3.0*t );
-  ref_state.ve = -3.0*std::sin( 3.0*t );
+  ref_state.vn = A*w*std::cos( w*t );
+  ref_state.ve = -A*w*std::sin( w*t );
   ref_state.vd = 0.0;
-  
+
   ref_state.yaw = 0.0;
 
   // set an, ae, ad to second derivatives if needed for FF..
@@ -74,13 +95,13 @@ TrajRef getCircleReference( const ros::Duration &cur_time )
 TrajRef getDefaultReference( const ros::Duration &cur_time )
 {
   TrajRef ref_state;
-  ref_state.pn = 1.0;
-  ref_state.pe = 1.0;
-  ref_state.pd = -1.5;
+  ref_state.pn = 0.5;
+  ref_state.pe = 0.5;
+  ref_state.pd = -1.0;
   ref_state.vn = 0.0;
   ref_state.ve = 0.0;
   ref_state.vd = 0.0;
-  ref_state.yaw = DEG2RAD(-120.0);
+  ref_state.yaw = DEG2RAD(0.0);
   ref_state.an = 0.0;
   ref_state.ae = 0.0;
   ref_state.ad = 0.0;
@@ -234,8 +255,12 @@ int main( int argc, char** argv )
   while( ros::ok() )
   {
     TrajRef ref_state;
-    if( traj_type == "circle" )
-      ref_state = getCircleReference( ros::Time::now() - init_time );
+    if( traj_type == "circle1" )
+      ref_state = getCircleReference( ros::Time::now() - init_time, 1 );
+    else if( traj_type == "circle2" )
+      ref_state = getCircleReference( ros::Time::now() - init_time, 2 );
+    else if( traj_type == "circle3" )
+      ref_state = getCircleReference( ros::Time::now() - init_time, 3 );
     else if( traj_type == "hover" )
       ref_state = getHoverReference( ros::Time::now() - init_time );
     else
