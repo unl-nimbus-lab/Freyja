@@ -6,29 +6,32 @@
     also do velocity-only control (ignores position refs).
     ~ aj // Nimbus Lab.
   -->
+	<!-- allowed autopilots: "asctec" or "arducopter" -->
+	<arg name="autopilot"                 default="arducopter" />
+	<arg name="vicon_topic"               default="/vicon/F1/F1" />
 
-  <!-- allowed autopilots: "asctec" or "arducopter" -->
-  <arg name="autopilot"                 default="arducopter" />
-  <arg name="vicon_topic"               default="/vicon/F1/F1" />
-
-  <!-- use "device:baudrate" for apm, "device" for asctec -->
-  <arg name="comm_port"                 default="/dev/ttyUSB0:57600"/>
-  <arg name="total_mass"                default="0.95"/>
+	<!-- use "device:baudrate" for apm, "device" for asctec -->
+	<arg name="comm_port"                 default="/dev/ttyUSB0:57600"/>
+	<arg name="total_mass"                default="0.95"/>
   <arg name="thrust_scaler" 						default="200.0"/>
+
+	<!-- true if testing an example flight -->
+	<arg name="use_example_trajectory"    default="false" />
+  <arg name="example_trajectory"        default="hover" /> <!--"hover", "circle", "fastcircle" -->
 
   <!-- launch a handler for discrete waypoints -->
   <arg name="use_waypoint_handler"      default="false" />
+  <arg name="waypoint_handler_mode"     default="speed" /> <!--"speed", "time" -->
 
   <!-- advanced settings -->
-  <arg name="use_velctrl_only"          default="false"/>
-  <arg name="bias_compensation"         default="false" />
+	<arg name="use_velctrl_only" default="false"/>
+	<arg name="bias_compensation" default="false" />
 
-  <!-- Used for examples -->
-  <arg name="use_examples"              default="false"/>
-  <arg name="example_number"            default="0" />
+  <!-- autostart rosbag -->
+	<arg name="start_rosbag" default="false"/>
 
-  <!-- state source can be: "apm", "asctec", "vicon" or "onboard_camera" -->
-  <!-- implemented filters: "median", "gauss" and "lwma" -->
+	<!-- state source can be: "apm", "asctec", "vicon" or "onboard_camera" -->
+	<!-- implemented filters: "median", "gauss" and "lwma" -->
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
     <param name="state_source" type="string" value="vicon" />
     <param name="filter_type" type="string" value="median" />
