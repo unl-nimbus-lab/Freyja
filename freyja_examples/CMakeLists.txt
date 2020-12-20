@@ -37,3 +37,4 @@ add_dependencies(temporal_provider_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${ca
 target_link_libraries(temporal_provider_node
    ${catkin_LIBRARIES}
  )
+ 
