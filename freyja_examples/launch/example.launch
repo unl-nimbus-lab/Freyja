@@ -23,8 +23,5 @@
         if="$(eval example_number==3)" >
     <param name="/waypoint_mode" value="1" type="int" />
 	</node>
-
-  <!-- Remove before final commit -->
-  <node name="ref_to_point_node" pkg="freyja_examples" type="ref_to_point.py" />
-
+	
 </launch>
