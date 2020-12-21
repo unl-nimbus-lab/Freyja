@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(freyja_trajectory_provider)
+project(freyja_examples)
 set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3" )
 
 ## Find catkin macros and libraries
@@ -31,18 +31,10 @@ include_directories(
 )
 
 # simple trajectory provider
-add_executable(trajectory_provider_node src/trajectory_provider.cpp)
-add_dependencies(trajectory_provider_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_executable(temporal_provider_node src/temporal_provider.cpp)
+add_dependencies(temporal_provider_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(trajectory_provider_node
+target_link_libraries(temporal_provider_node
    ${catkin_LIBRARIES}
  )
-
-
-# vision-based guidance for approach
-# add_executable(trajectory_shaper_node src/trajectory_shaper.cpp)
-# add_dependencies(trajectory_shaper_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-# target_link_libraries(trajectory_shaper_node
-#   ${catkin_LIBRARIES}
-# )
+ 

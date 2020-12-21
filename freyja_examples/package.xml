@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>freyja_trajectory_provider</name>
+  <name>freyja_examples</name>
   <version>0.0.0</version>
-  <description>The trajectory_provider package</description>
+  <description>The examples package showing use cases</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->

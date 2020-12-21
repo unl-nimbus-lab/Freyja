@@ -1,0 +1,27 @@
+<launch>
+  <!-- vim: set ft=xml noet : -->
+
+  <arg name="example_number" default="0"/>
+
+  <node name="temporal_provider_node" pkg="freyja_examples" type="temporal_provider_node"
+        if="$(eval example_number==0)" >
+    <param name="example_traj_type" type="string" value="hover"/>
+  </node>
+
+  <node name="temporal_provider_node" pkg="freyja_examples" type="temporal_provider_node"
+        if="$(eval example_number==1)" >
+    <param name="example_traj_type" type="string" value="circle1"/>
+  </node>
+
+  <!-- Example 4/5: use_waypoint_handler:=true in freyja_controller.launch -->
+  <node name="waypoint_provider_node" pkg="freyja_examples" type="waypoint_provider.py"
+        if="$(eval example_number==2)" >
+    <param name="/waypoint_mode" value="0" type="int" />
+	</node>
+
+  <node name="waypoint_provider_node" pkg="freyja_examples" type="waypoint_provider.py"
+        if="$(eval example_number==3)" >
+    <param name="/waypoint_mode" value="1" type="int" />
+	</node>
+	
+</launch>
