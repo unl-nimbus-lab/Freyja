@@ -1,4 +1,10 @@
-/* An implementation of the paper:
+/* 
+Handles user-requested discrete waypoints and produces the appropriate
+reference_state for the controller.
+Two modes are supported for waypoints: TIME (0) and SPEED (1).
+  TIME(0): generates a trajectory that meets the requested waypoint 
+  at exactly t seconds in the future. t is user-provided.
+  This is an implementation of the paper:
       Mueller, Mark W., Markus Hehn, and Raffaello D'Andrea.
       "A computationally efficient motion primitive for
       quadrocopter trajectory generation."
@@ -6,10 +12,13 @@
   for trajectories that have defined position+velocity start and end states.
   Resultant trajectories are energy-optimal and second-order smooth.
 
+  SPEED(1): generates a linear constant-speed path from current location
+  to the requested waypoint. Translational speed target is user-provided.
+  
   Overview:
-    1. Accepts a terminal state [pos3ax,vel3ax,yaw] and an allocated_time;
+    1. Accept a terminal state [pos3ax,vel3ax,yaw], and, allocated_time or translational_speed;
     2. Snapshot current state
-    3. Plan a smooth trajectory that takes allocated_time to finish
+    3. Plan a smooth trajectory towards the destination
     4. Hover in the beginning and end.
 
   -- aj // May 2020 // Nimbus Lab.
@@ -27,7 +36,7 @@
 
 #include <eigen3/Eigen/Dense>
 
-#define ROS_NODE_NAME "trajectory_primitives"
+#define ROS_NODE_NAME "waypoint_manager"
 
 #define DEG2RAD(D) ((D)*3.14153/180.0)
 
@@ -136,7 +145,7 @@ TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
   traj_timer_ = nh_.createTimer( ros::Duration(traj_period),
                             &TrajectoryGenerator::trajectoryReference, this );
 
-  ROS_WARN_STREAM( ros::this_node::getName() << ": Initialized, waiting for waypoint" );
+  ROS_WARN_STREAM( ros::this_node::getName() << ": Initialized, waiting for waypoint .." );
 }
 
 void TrajectoryGenerator::currentStateCallback( const freyja_msgs::CurrentState::ConstPtr &msg )
@@ -154,50 +163,65 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
       translational_speed
       waypoint_mode (WaypointTarget::TIME=0, WaypointTarget::SPEED=1)
   */
-  // Check if we are in time or speed mode
-  if ( msg->waypoint_mode == msg->TIME ||  msg->waypoint_mode == msg->SPEED )
-  {
-    // Update yaw
-    yaw_target = msg->terminal_yaw;
-
-    // check if the change is big enough to do a replan: final_state_: [1x6]
-    Eigen::Matrix<double, 1, 6> updated_final_state;
-    updated_final_state << msg->terminal_pn, msg->terminal_pe, msg->terminal_pd,
-    msg->terminal_vn, msg->terminal_ve, msg->terminal_vd;
-
-    if( ( updated_final_state - final_state_ ).norm() > k_thresh_skipreplan_ )
-    {
-
-      /* accept new waypoint */
-      final_state_ = updated_final_state;
-
-      if (msg->waypoint_mode == msg->TIME) // Time mode
-      {
-        traj_alloc_duration_ = msg->allocated_time;
-        trigger_replan_time( traj_alloc_duration_ );
-        mode_ = time_mode;
-      }
-      else // Speed mode 
-      {
-        traj_alloc_speed_ = msg->translational_speed;
-        trigger_replan_speed( traj_alloc_speed_ );
-        mode_ = speed_mode;
-      }
-      ROS_WARN( "Plan generated!" );
-      t_traj_init_ = ros::Time::now();
-
-    }
-    else
-    {
-      // Reject waypoint
-      ROS_WARN_STREAM( ros::this_node::getName() << ": New WP too close to old WP. Ignoring!" );
-    }
-  }
-  else
+  
+  // Check if we aren't in a correct mode (time or speed mode)
+  if( msg->waypoint_mode != msg->TIME && msg->waypoint_mode != msg->SPEED )
   {
     // Reject waypoint
     ROS_WARN_STREAM( ros::this_node::getName() << ": Waypoint mode incorrectly specified. Ignoring!" );
     return;
+  }
+  
+  // guess if provided waypoint mode was "accidental" or wrong
+  if( msg->waypoint_mode == msg->TIME && msg->allocated_time < 0.01 )
+  {
+    ROS_WARN_STREAM( ros::this_node::getName() << ": Allocated time too small (possibly zero). Ignoring!" );
+    ROS_WARN_STREAM( ros::this_node::getName() << ": ---- Did you mean to use SPEED mode?" );
+    return;
+  }
+  
+  if( msg->waypoint_mode == msg->SPEED && msg->translational_speed < 0.001 )
+  {
+    ROS_WARN_STREAM( ros::this_node::getName() << ": Translational speed too small (possibly zero). Ignoring!" );
+    ROS_WARN_STREAM( ros::this_node::getName() << ": ---- Speed must be positive and greater than 0.001 m/s." );
+    return;
+  }
+
+  // PROCESS WAYPOINT
+  // Update yaw
+  yaw_target = msg->terminal_yaw;
+
+  // check if the change is big enough to do a replan: final_state_: [1x6]
+  Eigen::Matrix<double, 1, 6> updated_final_state;
+  updated_final_state << msg->terminal_pn, msg->terminal_pe, msg->terminal_pd,
+                         msg->terminal_vn, msg->terminal_ve, msg->terminal_vd;
+
+  if( ( updated_final_state - final_state_ ).norm() > k_thresh_skipreplan_ )
+  {
+    /* accept new waypoint */
+    final_state_ = updated_final_state;
+
+    if (msg->waypoint_mode == msg->TIME) // Time mode
+    {
+      traj_alloc_duration_ = msg->allocated_time;
+      trigger_replan_time( traj_alloc_duration_ );
+      mode_ = time_mode;
+    }
+    else // Speed mode 
+    {
+      traj_alloc_speed_ = msg->translational_speed;
+      trigger_replan_speed( traj_alloc_speed_ );
+      mode_ = speed_mode;
+    }
+    
+    ROS_WARN( "Plan generated!" );
+    t_traj_init_ = ros::Time::now();
+
+  }
+  else
+  {
+    // Reject waypoint because it is not distinct enough
+    ROS_WARN_STREAM( ros::this_node::getName() << ": New WP too close to old WP. Ignoring!" );
   }
 
   // this is only handled once - trajectory is never reinit, only updated.
