@@ -197,6 +197,7 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
   {
     // Reject waypoint
     ROS_WARN_STREAM( ros::this_node::getName() << ": Waypoint mode incorrectly specified. Ignoring!" );
+    return;
   }
 
   // this is only handled once - trajectory is never reinit, only updated.
