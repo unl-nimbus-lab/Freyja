@@ -41,9 +41,10 @@ Two modes are supported for waypoints: TIME (0) and SPEED (1).
 #define DEG2RAD(D) ((D)*3.14153/180.0)
 
 const int nAxes = 3;
-typedef Eigen::Matrix<double, 1, 3> Pos3ax;
-typedef Eigen::Matrix<double, 1, 6> PosVel3ax;
-typedef Eigen::Matrix<double, 1, 9> PosVelAcc3ax;
+typedef Eigen::Matrix<double, 1, 3> PosNED;
+typedef Eigen::Matrix<double, 1, 6> PosVelNED;
+typedef Eigen::Matrix<double, 1, 9> PosVelAccNED;
+typedef Eigen::Matrix<double, 3, 3> PosVelAccNED3x3;
 
 enum modes{time_mode=0, speed_mode=1};
 
@@ -70,7 +71,7 @@ class TrajectoryGenerator
   ros::Timer traj_timer_;
   bool traj_init_;
 
-  modes mode_;
+  modes wp_mode_;
   double segment_percentage_;
   
   float k_thresh_skipreplan_;
@@ -125,7 +126,7 @@ TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
   traj_init_ = false;
 
   // default to speed mode (as per waypoint default)
-  mode_ = speed_mode;
+  wp_mode_ = speed_mode;
 
   // Init eigen matrices 
   current_state_ = Eigen::Matrix<double, 1, 9>::Zero();
@@ -151,7 +152,7 @@ TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
 void TrajectoryGenerator::currentStateCallback( const freyja_msgs::CurrentState::ConstPtr &msg )
 {
   /* make current_state available locally */
-  current_state_.head<6>() = Eigen::Map<const PosVel3ax>( msg->state_vector.data() );
+  current_state_.head<6>() = Eigen::Map<const PosVelNED>( msg->state_vector.data() );
 }
 
 void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::ConstPtr &msg )
@@ -196,7 +197,7 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
   updated_final_state << msg->terminal_pn, msg->terminal_pe, msg->terminal_pd,
                          msg->terminal_vn, msg->terminal_ve, msg->terminal_vd;
 
-  if( ( updated_final_state - final_state_ ).norm() > k_thresh_skipreplan_ )
+  if( ( updated_final_state - final_state_ ).norm() > k_thresh_skipreplan_ || !traj_init_ )
   {
     /* accept new waypoint */
     final_state_ = updated_final_state;
@@ -205,13 +206,13 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
     {
       traj_alloc_duration_ = msg->allocated_time;
       trigger_replan_time( traj_alloc_duration_ );
-      mode_ = time_mode;
+      wp_mode_ = time_mode;
     }
     else // Speed mode 
     {
       traj_alloc_speed_ = msg->translational_speed;
       trigger_replan_speed( traj_alloc_speed_ );
-      mode_ = speed_mode;
+      wp_mode_ = speed_mode;
     }
     
     ROS_WARN( "Plan generated!" );
@@ -273,9 +274,9 @@ void TrajectoryGenerator::trigger_replan_speed( const double &speed )
 
 inline void TrajectoryGenerator::update_premult_matrix( const double &tf )
 {
-  tf_premult_ <<  720.0, -360.0*tf, 60.0*tf*tf,
-                 -360*tf, 168.0*tf*tf, -24.0*tf*tf*tf,
-                 60.0*tf*tf, -24.0*tf*tf*tf, 3.0*tf*tf*tf*tf;
+  tf_premult_ <<  720.0,      -360.0*tf,        60.0*tf*tf,
+                 -360.0*tf,    168.0*tf*tf,    -24.0*tf*tf*tf,
+                   60.0*tf*tf, -24.0*tf*tf*tf,   3.0*tf*tf*tf*tf;
                  
   // necessarily update alpha, beta and gamma as well
   update_albtgm( tf );
@@ -298,9 +299,9 @@ void TrajectoryGenerator::trajectoryReference( const ros::TimerEvent &event )
     
   float tnow = (ros::Time::now() - t_traj_init_).toSec();
   
-  PosVelAcc3ax tref;
+  static PosVelAccNED3x3 tref; // [pn, pe, pd;; vn, ve, vd;; an, ae, ad]
 
-  if ( mode_ == time_mode ) // Time mode
+  if ( wp_mode_ == time_mode ) // Time mode
   {
     /* check if we are past the final time */
     if( tnow > traj_alloc_duration_ || !traj_init_ )
@@ -317,16 +318,12 @@ void TrajectoryGenerator::trajectoryReference( const ros::TimerEvent &event )
     tnow_matrix_ << t5, t4, t3,
                     t4, t3, t2,
                     t3, t2, tnow;  
-    // three stacked cols of [pos; vel; acc] for each axis.
-    Eigen::MatrixXd traj_pt = tnow_matrix_ * albtgm_ +
-                            (Eigen::Matrix<double, 3, 3>() <<
+    // three stacked cols of [pos, vel, acc]^T for each axis.
+    tref = tnow_matrix_ * albtgm_ +
+              (Eigen::Matrix<double, 3, 3>() <<
                                 1, tnow, t2,
                                 0,  1, tnow,
                                 0,  0,   1).finished() * planning_cur_state_;
-
-    // TODO (couldnt get transpose to work)
-    // tref << traj_pt.transpose();
-    tref = traj_pt.reshaped<Eigen::RowMajor>().transpose();
   }
   else // Speed mode
   {
@@ -339,28 +336,26 @@ void TrajectoryGenerator::trajectoryReference( const ros::TimerEvent &event )
 
     // Calculate new position based on line
     auto new_pos = segment_gradients_ * (tnow * segment_percentage_) + 
-          segment_intersection_;
+                   segment_intersection_;
 
-    // Todo clean up this operation
-    // tref << new_pos(0, 0), segment_gradients_(0), 0,
-    //         new_pos(0, 1), segment_gradients_(1), 0,
-    //         new_pos(0, 2), segment_gradients_(2), 0;
-    tref << new_pos, segment_gradients, 0.0, 0.0, 0.0;
+    tref << new_pos,
+            segment_gradients,
+            0.0, 0.0, 0.0;
 
   }
   
   /* fill in and publish */
-  traj_ref_.pn = tref(0);
-  traj_ref_.pe = tref(1);
-  traj_ref_.pd = tref(2);
+  traj_ref_.pn = tref(0,0);
+  traj_ref_.pe = tref(0,1);
+  traj_ref_.pd = tref(0,2);
 
-  traj_ref_.vn = tref(3);
-  traj_ref_.ve = tref(4);
-  traj_ref_.vd = tref(5);
+  traj_ref_.vn = tref(1,0);
+  traj_ref_.ve = tref(1,1);
+  traj_ref_.vd = tref(1,2);
 
-  traj_ref_.an = tref(6);
-  traj_ref_.ae = tref(7);
-  traj_ref_.ad = tref(8);
+  traj_ref_.an = tref(2,0);
+  traj_ref_.ae = tref(2,1);
+  traj_ref_.ad = tref(2,2);
 
   traj_ref_.yaw = yaw_target;     // nothing special for yaw
   traj_ref_.header.stamp = ros::Time::now();
@@ -409,4 +404,6 @@ int main( int argc, char** argv )
 }
 
 
-//TODO: Add status waypoint_done
+//TODO: Add status waypoint_done, protect trajectory-gen with mutex
+//TODO: rename topic to "discrete_waypoint_target" to prevent abuse
+//TODO: change to enum class, and start enumerating at 1
