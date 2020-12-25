@@ -7,7 +7,7 @@
     ~ aj // Nimbus Lab.
   -->
 
-  <!-- allowed autopilots: "asctec" or "arducopter" --> 
+  <!-- allowed autopilots: "asctec", "arducopter", "px4" --> 
   <!-- must provide vicon_topic -->
   <arg name="autopilot" default="arducopter"/>
   <arg name="vicon_topic"/>
@@ -66,6 +66,14 @@
       <param name="thrust_scaler" type="double" value="$(arg thrust_scaler)" />
     </node>
     <include file="$(find freyja_configfiles)/apm_nimbus.launch">
+      <arg name="fcu_url" value="$(arg comm_port)"/>
+    </include>
+  </group>
+  <group if="$(eval autopilot=='px4')">
+    <node name="apm_handler" pkg="px4_handler" type="px4_handler_node">
+      <param name="thrust_scaler" type="double" value="$(arg thrust_scaler)" />
+    </node>
+    <include file="$(find freyja_configfiles)/px4_nimbus.launch">
       <arg name="fcu_url" value="$(arg comm_port)"/>
     </include>
   </group>

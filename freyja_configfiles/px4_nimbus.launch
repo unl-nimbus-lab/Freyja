@@ -1,0 +1,34 @@
+<launch>
+	<!-- vim: set ft=xml noet : -->
+	<!-- Launch script for px4-stack based FCU's -->
+	<!-- Customised for NimbusLab indoor flights. ~aj -->
+
+	<arg name="fcu_url" default="/dev/ttyUSB0:57600" />
+	<!--arg name="fcu_url" default="/dev/ttyUSB0:115200" /-->
+	<arg name="gcs_url" default="" />
+	<arg name="tgt_system" default="1" />
+	<arg name="tgt_component" default="1" />
+	<arg name="log_output" default="screen" />
+	<arg name="fcu_protocol" default="v2.0" />
+	<arg name="respawn_mavros" default="false" />
+	<arg name="blacklisted" default="['waypoint', 'vfr_hud']"/>
+
+	<include file="$(find mavros)/launch/node.launch">
+		<arg name="pluginlists_yaml" value="$(find freyja_configfiles)/apm_pluginlists_nimbus.yaml" />
+		<arg name="config_yaml" value="$(find freyja_configfiles)/px4_config_nimbus.yaml" />
+
+		<arg name="fcu_url" value="$(arg fcu_url)" />
+		<arg name="gcs_url" value="$(arg gcs_url)" />
+		<arg name="tgt_system" value="$(arg tgt_system)" />
+		<arg name="tgt_component" value="$(arg tgt_component)" />
+		<arg name="log_output" value="$(arg log_output)" />
+		<arg name="fcu_protocol" value="$(arg fcu_protocol)" />
+		<arg name="respawn_mavros" default="$(arg respawn_mavros)" />
+		<!--arg name="plugin_blacklist" value="$(arg blacklisted)" /-->
+	</include>
+	
+	<!-- global params for keeping mavros under control -->
+	<param name="/mavros/setpoint_attitude/use_quaternion" value="true" />
+	<param name="/mavros/conn/timesync_rate" value="0.0" />
+	
+</launch>

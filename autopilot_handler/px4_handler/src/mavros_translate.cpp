@@ -97,10 +97,6 @@ void sendToMavros( const double &p, const double &r, const double &y, const doub
   atti_pub.publish( atti_tgt );
 }
 
-ros::ServiceClient rtkmap_lock;
-ros::ServiceClient iscompsrv;
-bool vehicle_armed_ = false;
-bool in_cmode_ = false;
 void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
 {
 }
@@ -127,9 +123,6 @@ int main( int argc, char **argv )
   ros::Subscriber mavrc_sub = nh.subscribe
                             ( "/mavros/rc/in", 1, rc_callback );
 
-  rtkmap_lock = nh.serviceClient<std_srvs::SetBool>("/set_rtk_mapcorrections");
-  iscompsrv = nh.serviceClient<std_srvs::SetBool>( "/set_bias_compensation");
-  
   ros::spin();
   return 0;
 }
