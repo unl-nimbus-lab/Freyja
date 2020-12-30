@@ -12,9 +12,12 @@
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/TwistStamped.h>
+#include <geometry_msgs/Vector3.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <nav_msgs/Odometry.h>
+#include <std_msgs/Float64.h>
 #include <tf/tf.h>
+#include <std_srvs/SetBool.h>
 
 #include <freyja_msgs/CurrentState.h>
 #include <freyja_msgs/AsctecData.h>
@@ -24,6 +27,8 @@
 typedef geometry_msgs::TransformStamped TFStamped;
 typedef geometry_msgs::TwistStamped TwStamped;
 typedef nav_msgs::Odometry CameraOdom;
+typedef std_srvs::SetBool::Request BoolServReq;
+typedef std_srvs::SetBool::Response BoolServRsp;
 
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
 #define F_PI 3.14153
@@ -69,13 +74,21 @@ class StateManager
   FreyjaFilters pose_filter_;
   FreyjaFilters rate_filter_;
   
+  /* containers for handling gps data */
   double home_lat_, home_lon_;
   bool have_location_fix_;
+  double compass_yaw_;
+  
+  bool have_arming_origin_;
+  double map_rtk_pn_, map_rtk_pe_, map_rtk_pd_;
+  double arming_gps_pn_, arming_gps_pe_, arming_gps_pd_;
+  double gps_odom_pn_, gps_odom_pe_, gps_odom_pd_;
+  double rtk_baseoffset_pn_, rtk_baseoffset_pe_, rtk_baseoffset_pd_;
   
   public:
     StateManager();
     /* launch-time parameter specifies which one to pick */
-    void initApmManager();
+    void initPixhawkManager();
     void initAsctecManager();
     void initViconManager();
     void initCameraManager();
@@ -87,17 +100,40 @@ class StateManager
     /* Callback handler for asctec_onboard_data */
     ros::Subscriber asctec_data_sub_;
     void asctecDataCallback( const freyja_msgs::AsctecData::ConstPtr & );
-
-    /* Callback handlers for mavros data */
-    ros::Subscriber mavros_gps_sub_;
-    ros::Subscriber mavros_vel_sub_;
-    void mavrosGpsCallback( const sensor_msgs::NavSatFix::ConstPtr & );
-    void mavrosGpsVelCallback( const TwStamped::ConstPtr & );
     
     /* Callback handler for camera updates */
     ros::Subscriber camera_estimate_sub_;
     void cameraUpdatesCallback( const CameraOdom::ConstPtr & );
     
+    /* Callback handlers for mavros data */
+    ros::Subscriber mavros_gpsraw_sub_;
+    ros::Subscriber mavros_vel_sub_;
+    ros::Subscriber compass_sub_;
+    ros::Subscriber mavros_gpsodom_sub_;
+    ros::Subscriber mavros_rtk_sub_;
+    void mavrosGpsOdomCallback( const nav_msgs::Odometry::ConstPtr & );
+    void mavrosCompassCallback( const std_msgs::Float64::ConstPtr & );
+    void mavrosRtkBaselineCallback( const geometry_msgs::Vector3::ConstPtr & );
+    
+    void mavrosGpsRawCallback( const sensor_msgs::NavSatFix::ConstPtr & );
+    
+    /* handlers for locking map frame origins */
+    inline void lockArmingGps( bool _lock = true )
+    {
+      arming_gps_pn_ = _lock? gps_odom_pn_ : 0.0;
+      arming_gps_pe_ = _lock? gps_odom_pe_ : 0.0;
+      arming_gps_pd_ = _lock? gps_odom_pd_ : 0.0;
+    }
+    inline void lockMapRTK( bool _lock = true )
+    {
+      map_rtk_pn_ = _lock? rtk_baseoffset_pn_ : 0.0;
+      map_rtk_pe_ = _lock? rtk_baseoffset_pe_ : 0.0;
+      map_rtk_pd_ = _lock? rtk_baseoffset_pd_ : 0.0;
+    }
+    
+    ros::ServiceServer maplock_srv_;
+    bool maplockArmingHandler( BoolServReq&, BoolServRsp& );
+
     
     /* Publisher for state information */
     ros::Publisher state_pub_;

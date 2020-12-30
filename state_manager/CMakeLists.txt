@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
   freyja_msgs
   sensor_msgs
   nav_msgs
+  std_srvs
 )
 
 
