@@ -111,7 +111,7 @@ void StateManager::initPixhawkManager()
   compass_sub_ = nh_.subscribe( "/mavros/global_position/compass_hdg", 1, 
 				                &StateManager::mavrosCompassCallback, this );
 				                
-  maplock_srv_ = nh_.advertiseService( "/lock_arming_maps", 
+  maplock_srv_ = nh_.advertiseService( "/lock_arming_mapframe", 
                         &StateManager::maplockArmingHandler, this );
 }
 

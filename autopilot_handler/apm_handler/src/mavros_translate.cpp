@@ -97,46 +97,42 @@ void sendToMavros( const double &p, const double &r, const double &y, const doub
   atti_pub.publish( atti_tgt );
 }
 
-ros::ServiceClient rtkmap_lock;
-ros::ServiceClient iscompsrv;
+ros::ServiceClient map_lock;
 bool vehicle_armed_ = false;
-bool in_cmode_ = false;
 void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
 {
+  std_srvs::SetBool lockreq;
   if( msg->armed == true && !vehicle_armed_ )
   {
     vehicle_armed_ = true;
-    std_srvs::SetBool lockrtk;
-    lockrtk.request.data = true;
-    rtkmap_lock.call( lockrtk );
-    ROS_WARN( "Locking rtk map.. " );
+    lockreq.request.data = true;
   }
   else if( msg->armed == false && vehicle_armed_ )
   {
     vehicle_armed_ = false;
-    std_srvs::SetBool lockrtk;
-    lockrtk.request.data = false;
-    rtkmap_lock.call( lockrtk );
-    ROS_WARN( "Unlocking rtk map .." );
+    lockreq.request.data = false;
   }
+  map_lock.call( lockreq );
 }
+
+ros::ServiceClient iscompsrv;
+bool in_cmode_ = false;
 void rc_callback( const mavros_msgs::RCIn::ConstPtr &msg )
 {
+  /*
+  std_srvs::SetBool iscomp;
   if( msg -> channels[5] < 1500 && !in_cmode_ )
   {
-      //if( msg->mode == "CMODE(25)" && !in_cmode_ )
     in_cmode_ = true;
-    std_srvs::SetBool iscomp;
     iscomp.request.data = true;
-    iscompsrv.call( iscomp );
   }
   else if( msg -> channels[5] >=1500 && in_cmode_ )
   {
     in_cmode_ = false;
-    std_srvs::SetBool iscomp;
     iscomp.request.data = false;
-    iscompsrv.call( iscomp );
   }
+  iscompsrv.call( iscomp );
+  */
 }
 
 int main( int argc, char **argv )
@@ -159,7 +155,7 @@ int main( int argc, char **argv )
   ros::Subscriber mavrc_sub = nh.subscribe
                             ( "/mavros/rc/in", 1, rc_callback );
 
-  rtkmap_lock = nh.serviceClient<std_srvs::SetBool>("/set_rtk_mapcorrections");
+  map_lock = nh.serviceClient<std_srvs::SetBool>("/lock_arming_mapframe");
   iscompsrv = nh.serviceClient<std_srvs::SetBool>( "/set_bias_compensation");
   
   ros::spin();
