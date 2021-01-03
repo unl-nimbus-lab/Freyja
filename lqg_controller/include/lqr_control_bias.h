@@ -30,6 +30,7 @@
 typedef freyja_msgs::ReferenceState TrajRef;
 typedef std_srvs::SetBool::Request BoolServReq;
 typedef std_srvs::SetBool::Response BoolServRsp;
+typedef Eigen::Matrix<double, 6, 1> PosVelNED;
 
 class LQRController
 {

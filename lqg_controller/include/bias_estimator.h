@@ -19,7 +19,8 @@
 #include <freyja_msgs/CurrentStateBiasEst.h>
 
 typedef std::chrono::microseconds uSeconds;
-typedef std::chrono::time_point<std::chrono::high_resolution_clock> ClockTimePoint;
+typedef std::chrono::high_resolution_clock ClockTime;
+typedef std::chrono::time_point<ClockTime> ClockTimePoint;
 
 const int nStates = 9;
 const int nCtrl = 3;
@@ -65,6 +66,12 @@ class BiasEstimator
   /* timing related objects */
   ClockTimePoint ts, te, last_prop_t_;
   std::chrono::duration<double> prop_interval_;
+  
+  /* smooth-in the estimator using a time-constant factor */
+  double estimator_tc_;
+  double estimator_output_shaping_;
+  ClockTimePoint t_estimator_on_;
+  std::chrono::duration<double> tc_interval_;
 
   /* final ros data published */
   freyja_msgs::CurrentStateBiasEst state_msg_;
@@ -87,6 +94,24 @@ class BiasEstimator
     void setMeasurement( const Eigen::Matrix<double, 6, 1> & );
     void setControlInput( const Eigen::Matrix<double, 4, 1> & );
     void getEstimatedBiases( Eigen::Matrix<double, 3, 1> & );
+    
+    /* set and reset accessors */
+    inline void markEnabled() { t_estimator_on_ = ClockTime::now(); }
+    inline void clearBiases()
+    {
+      best_estimate_.tail<3>() << 0.0, 0.0, 0.0;
+      estimator_output_shaping_ = 0.0;
+    }
+    
+    /* Time constant calc */
+    inline void updateOutputShapingFactor()
+    {
+      /* Output shaping as a cubic polynomial of time since ON */
+      auto tnow = ClockTime::now();
+      tc_interval_ = tnow - t_estimator_on_;
+      double t_ratio = tc_interval_.count() / estimator_tc_;
+      estimator_output_shaping_ = std::min( 1.0, t_ratio * t_ratio * t_ratio );
+    }
 };
 
 /*

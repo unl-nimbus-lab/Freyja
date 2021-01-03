@@ -97,8 +97,16 @@ bool LQRController::biasEnableServer( BoolServReq& rq, BoolServRsp& rp )
 {
   bias_compensation_req_ = rq.data;
   if( bias_compensation_req_ )
-    ROS_WARN_THROTTLE( 1, "LQR: Bias compensation active!" );
-  return true;
+  {
+    ROS_WARN( "LQR: Bias compensation active!" );
+    bias_est_.markEnabled();
+  }
+  else
+  {
+    ROS_WARN( "LQR: Bias compensation inactive!" );
+    bias_est_.clearBiases();
+  }
+  return true;  // service successful
 }
 
 double LQRController::calcYawError( const double &a, const double &b )
@@ -111,23 +119,27 @@ double LQRController::calcYawError( const double &a, const double &b )
 void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &msg )
 {
   /* Parse message to obtain state and reduced state information */
-  const double *msgptr = msg -> state_vector.data();
-  std::vector<double> sv( msgptr, msgptr+13  );
+  static Eigen::Matrix<double, 7, 1> current_state;
 
-  float yaw = sv[8];
+  float yaw = msg->state_vector[8];
   rot_yaw_ << std::cos(yaw), std::sin(yaw), 0,
              -std::sin(yaw), std::cos(yaw), 0,
               0, 0, 1;
              
-  /* reduced state is the first 6 elements, and yaw */
-  Eigen::Matrix<double, 13,1 >temp( sv.data() );
-  reduced_state_ << temp.head<6>() , double(yaw);
+  /* state is the first 6 elements, and yaw */
+  current_state << Eigen::Map<const PosVelNED>( msg->state_vector.data() ),
+                   double(yaw);
+
+  /* set measurement for bias estimator */
+  if( bias_compensation_req_ )
+    bias_est_.setMeasurement( current_state.head<6>() );
   
   /* compute x - xr right here */
   std::unique_lock<std::mutex> rsmtx( reference_state_mutex_, std::defer_lock );
-  if( have_reference_update_ && rsmtx.try_lock() )
+  if( have_reference_update_ )
   {
-    reduced_state_.head<6>() -= reference_state_.head<6>();
+    rsmtx.lock();
+    reduced_state_.head<6>() = current_state.head<6>() - reference_state_.head<6>();
     /* yaw-error is done differently */
     reduced_state_(6) = calcYawError( reduced_state_(6), reference_state_(6) );
     rsmtx.unlock();
@@ -136,8 +148,6 @@ void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &ms
   have_state_update_ = true;
   last_state_update_t_ = ros::Time::now();
   
-  /* set measurement for bias estimator */
-  bias_est_.setMeasurement( temp.head<6>() );
 }
 
 void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
@@ -166,9 +176,11 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   Eigen::Matrix<double, 4, 1> control_input;
   
   bool state_valid = true;
+  auto tnow = ros::Time::now();
   
   /* Check the difference from last state update time */
-  if( (ros::Time::now() - last_state_update_t_).toSec() > STATEFB_MISSING_INTRV_ )
+  float state_age = (tnow - last_state_update_t_).toSec();
+  if( state_age > STATEFB_MISSING_INTRV_ )
   {
     /* State feedback missing for more than specified interval. Try descend */
     roll = pitch = yaw = 0.0;
@@ -189,7 +201,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
     if( bias_compensation_req_ )
     {
       bias_est_.getEstimatedBiases( f_biases_ );
-      control_input.head<3>() -= f_biases_;
+      control_input.head<3>() -= f_biases_.head<3>();
     }
   
     /* Thrust */
@@ -204,7 +216,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   
   /* Debug information */
   freyja_msgs::ControllerDebug debug_msg;
-  debug_msg.header.stamp = ros::Time::now();
+  debug_msg.header.stamp = tnow;
   debug_msg.lqr_u[0] = control_input(0);
   debug_msg.lqr_u[1] = control_input(1);
   debug_msg.lqr_u[2] = control_input(2);
@@ -226,7 +238,8 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   atti_cmd_pub_.publish( ctrl_cmd );
   
   /* Tell bias estimator about new control input */
-  bias_est_.setControlInput( control_input );
+  if( bias_compensation_req_ )
+    bias_est_.setControlInput( control_input );
 }
 
 int main( int argc, char** argv )

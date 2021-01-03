@@ -29,6 +29,10 @@ BiasEstimator::BiasEstimator() : nh_(), priv_nh_("~")
   priv_nh_.param( "estimator_rate", estimator_rate_, estimator_rate_default );
   estimator_period_us_ = std::round( (1.0/estimator_rate_)*1000*1000 );
   
+  /* Time constant  factor */
+  estimator_tc_ = 1.5;
+  estimator_output_shaping_ = 0.0;
+  
   /* init estimator matrices */
   initEstimatorSystem();
   
@@ -201,6 +205,10 @@ void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c )
 void BiasEstimator::getEstimatedBiases( Eigen::Matrix<double, 3, 1> &eb )
 {
   // return 3 elements starting at 6: bn, be, bd.
-  eb = best_estimate_.block<3,1>(6,0);
+  if( estimator_output_shaping_ > 0.95 )
+    estimator_output_shaping_ = 1.0;
+  else
+    updateOutputShapingFactor();
+  eb = estimator_output_shaping_ * best_estimate_.tail<3>();
 }
 
