@@ -19,6 +19,7 @@
 #include <freyja_msgs/CurrentStateBiasEst.h>
 
 typedef std::chrono::microseconds uSeconds;
+typedef std::chrono::time_point<std::chrono::high_resolution_clock> ClockTimePoint;
 
 const int nStates = 9;
 const int nCtrl = 3;
@@ -33,7 +34,7 @@ class BiasEstimator
   Eigen::Matrix<double, nStates, nCtrl> sys_B_;
   
   Eigen::Matrix<double, nStates, 1> best_estimate_;
-  Eigen::Matrix<double, nCtrl, 1> ctrl_input_u_, prev_ctrl_input_;
+  Eigen::Matrix<double, nCtrl, 1> ctrl_input_u_;
   Eigen::Matrix<double, nMeas, 1> measurement_z_;
 
   /* KF matrices */
@@ -58,12 +59,11 @@ class BiasEstimator
   std::thread state_prop_thread_;
   volatile bool state_propagation_alive_;
   volatile int n_stprops_since_update_;
-  int n_stprops_allowed_;
   
   std::thread st_upd_thread_;
   
   /* timing related objects */
-  std::chrono::time_point<std::chrono::high_resolution_clock> ts, te, last_prop_t_;
+  ClockTimePoint ts, te, last_prop_t_;
   std::chrono::duration<double> prop_interval_;
 
   /* final ros data published */
