@@ -98,9 +98,12 @@ void sendToMavros( const double &p, const double &r, const double &y, const doub
 }
 
 ros::ServiceClient map_lock;
+ros::ServiceClient bias_comp;
 bool vehicle_armed_ = false;
+bool in_comp_mode_ = false;
 void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
 {
+  /* call map lock/unlock service when arming/disarming */
   std_srvs::SetBool lockreq;
   if( msg->armed == true && !vehicle_armed_ )
   {
@@ -113,25 +116,44 @@ void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
     lockreq.request.data = false;
   }
   map_lock.call( lockreq );
+  
+  /* call bias compensation service when switching in/out of computer */
+  std_srvs::SetBool biasreq;
+  if( msg->mode == "CMODE(25)" && !in_comp_mode_ )
+  {
+    in_comp_mode_ = true;
+    biasreq.request.data = true;
+  }
+  else if( msg->mode != "CMODE(25)" && in_comp_mode_ )
+  {
+    in_comp_mode_ = false;
+    biasreq.request.data = false;
+  }
+  bias_comp.call( biasreq );
 }
 
-ros::ServiceClient iscompsrv;
-bool in_cmode_ = false;
-void rc_callback( const mavros_msgs::RCIn::ConstPtr &msg )
+
+void rcdataCallback( const mavros_msgs::RCIn::ConstPtr &msg )
 {
+  /*  !!NOTE: mavros can publish a zero length array if no rc.
+    Check array length first, or wrap in try-catch */
   /*
-  std_srvs::SetBool iscomp;
-  if( msg -> channels[5] < 1500 && !in_cmode_ )
+  try
   {
-    in_cmode_ = true;
-    iscomp.request.data = true;
+    if( msg -> channels[5] < 1500 )
+    {
+      // do something
+    }
+    else if( msg -> channels[5] >=1500 )
+    {
+      // do something
+    }
   }
-  else if( msg -> channels[5] >=1500 && in_cmode_ )
+  catch( ... )
   {
-    in_cmode_ = false;
-    iscomp.request.data = false;
+    // skip
   }
-  iscompsrv.call( iscomp );
+  
   */
 }
 
@@ -153,11 +175,11 @@ int main( int argc, char **argv )
   ros::Subscriber mavstate_sub = nh.subscribe
                             ( "/mavros/state", 1, mavrosStateCallback );
   ros::Subscriber mavrc_sub = nh.subscribe
-                            ( "/mavros/rc/in", 1, rc_callback );
+                            ( "/mavros/rc/in", 1, rcdataCallback );
 
   map_lock = nh.serviceClient<std_srvs::SetBool>("/lock_arming_mapframe");
-  iscompsrv = nh.serviceClient<std_srvs::SetBool>( "/set_bias_compensation");
+  bias_comp = nh.serviceClient<std_srvs::SetBool>( "/set_bias_compensation");
   
-  ros::spin();
+  ros::MultiThreadedSpinner(2).spin();
   return 0;
 }
