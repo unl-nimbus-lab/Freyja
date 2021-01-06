@@ -44,6 +44,7 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
                     ( "/rpyt_command", 1, true );
   controller_debug_pub_ = nh_.advertise <freyja_msgs::ControllerDebug>
                     ( "/controller_debug", 1, true );
+  est_mass_pub_ = nh_.advertise<std_msgs::Float32>( "/freyja_estimated_mass", 1, true );
 
   /* Timer to run the LQR controller perdiodically */
   float controller_period = 1.0/controller_rate_;
@@ -56,9 +57,25 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   have_reference_update_ = false;  
   
   /* Bias compensation parameters */
-  bool _bcomp = true;
-  priv_nh_.param( "bias_compensation", bias_compensation_req_, _bcomp );
+  std::string _bcomp = "auto";
+  priv_nh_.param( "bias_compensation", _bcomp, _bcomp );
+  if( _bcomp == "on" )
+    bias_compensation_req_ = true;                // always on (be careful!!)
+  else if( _bcomp == "auto" || _bcomp == "off" )
+    bias_compensation_req_ = false;               // off, or on by service call
+  
   f_biases_ << 0.0, 0.0, 0.0;
+  
+  
+  /* Mass estimation */
+  enable_dyn_mass_correction_ = false;
+  priv_nh_.param( "mass_correction", enable_dyn_mass_correction_, bool(false) );
+  priv_nh_.param( "mass_estimation", enable_dyn_mass_estimation_, bool(true) );
+  if( enable_dyn_mass_correction_ )
+  {
+    enable_dyn_mass_estimation_ = true;
+    ROS_WARN( "LQR: Mass correction active at init! This is discouraged." );
+  }
 }
 
 void LQRController::initLqrSystem()
@@ -240,6 +257,43 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   /* Tell bias estimator about new control input */
   if( bias_compensation_req_ )
     bias_est_.setControlInput( control_input );
+    
+  /* Update the total flying mass if requested */
+  if( enable_dyn_mass_estimation_ )
+    estimateMass( control_input, tnow );
+}
+
+void LQRController::estimateMass( const Eigen::Matrix<double, 4, 1> &c, ros::Time &t )
+{
+  /* Experimental module that estimates the true mass of the system in air.
+    It uses the provided mass and observes the deviation from expected output
+    of the controller - and attributes *all* of that error to an incorrect
+    mass parameter. This is recommended only if mass may be off by ~200-300g.
+    Errors larger than that can induce major second-order oscillations, and are
+    usually better addressed elsewhere in the architecture (or get a better scale).
+  */
+  static float prev_estimated_mass = total_mass_;
+  static std_msgs::Float32 estmass;
+  static ros::Time t_last = ros::Time::now();
+
+  if( (t-t_last).toSec() < 3.0 )
+    return;
+
+  float ctrl_effort = c(2) + 9.81;
+  float estimated_mass = total_mass_*(9.81 - ctrl_effort)/9.81;
+  // basic low-pass filter to prevent wild jitter
+  estimated_mass = (prev_estimated_mass + estimated_mass)/2.0;
+  
+  estmass.data = estimated_mass;
+  est_mass_pub_.publish( estmass );
+  
+  /* if correction is allowed- clip between min and max */
+  if( enable_dyn_mass_correction_ )
+    total_mass_ = std::min( 2.0f, std::max( 0.8f, estimated_mass ) );
+  
+  // book-keeping
+  t_last = t;
+  prev_estimated_mass = estimated_mass;
 }
 
 int main( int argc, char** argv )

@@ -9,26 +9,26 @@
 
   <!-- allowed autopilots: "asctec" or "arducopter" --> 
   <!-- must provide vicon_topic -->
-  <arg name="autopilot" default="arducopter"/>
+  <arg name="autopilot"       default="arducopter"/>
   <arg name="vicon_topic"/>
   <!-- use "device:baudrate" for apm, "device" for asctec -->
-  <arg name="comm_port" default="/dev/ttyUSB0:57600"/>
-  <arg name="total_mass" default="0.95"/>
-  <arg name="thrust_scaler" default="200.0"/>
+  <arg name="comm_port"       default="/dev/ttyUSB0:57600"/>
+  <arg name="total_mass"      default="0.95"/>
+  <arg name="thrust_scaler"   default="200.0"/>
 	
   <!-- true if providing your own trajectory source -->
   <arg name="use_external_trajectory" default="false"/>
   <arg name="use_velctrl_only" default="false"/>
-  <arg name="bias_compensation" default="false" />
+  <arg name="bias_compensation" default="auto" />
   <arg name="start_rosbag" default="false"/>
 	
 	
   <!-- state source can be: "apm", "asctec", "vicon" or "onboard_camera" -->
   <!-- implemented filters: "median", "gauss" and "lwma" -->
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
-    <param name="state_source" type="string" value="vicon" />
-    <param name="filter_type" type="string" value="median" />
-    <param name="vicon_topic" type="string" value="$(arg vicon_topic)" />
+    <param name="state_source"  type="string"   value="vicon" />
+    <param name="filter_type"   type="string"   value="median" />
+    <param name="vicon_topic"   type="string"   value="$(arg vicon_topic)" />
   </node>
 
   <!-- an example trajectory node for reference -->
@@ -41,17 +41,19 @@
   <!-- control node (see velctrl flag above) -->
   <node name="lqg_controller" pkg="lqg_control" type="lqg_control_node"
   			output="screen" if="$(eval not use_velctrl_only)">
-	  <param name="controller_rate" type="int" value="45"  />
-  	<param name="total_mass" type="double" value="$(arg total_mass)"/>
-  	<param name="use_stricter_gains" type="bool" value="false" />
-  	<param name="estimator_rate" type="int" value="70" />
-  	<param name="bias_compensation" type="bool" value="$(arg bias_compensation)" />
+	  <param name="controller_rate"   type="int"    value="45"  />
+  	<param name="total_mass"        type="double" value="$(arg total_mass)"/>
+  	<param name="use_stricter_gains" type="bool"  value="false" />
+  	<param name="estimator_rate"    type="int"    value="10" />
+  	<param name="bias_compensation" type="string" value="$(arg bias_compensation)" />
+  	<param name="mass_estimation"   type="bool"   value="true" />
+  	<param name="mass_correction"   type="bool"   value="false" />
   </node>
   
   <node name="lqr_vel_controller" pkg="lqr_control" type="lqr_vel_ctrl_node"
   			if="$(eval use_velctrl_only)">
-    <param name="controller_rate" type="int" value="30" />
-    <param name="total_mass" type="double" value="$(arg total_mass)" />
+    <param name="controller_rate"   type="int"    value="30" />
+    <param name="total_mass"        type="double" value="$(arg total_mass)" />
   </node>
 
   <!-- autopilot communication node -->

@@ -17,6 +17,7 @@
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <std_srvs/SetBool.h>
+#include <std_msgs/Float32.h>
 
 #include <freyja_msgs/CurrentState.h>
 #include <freyja_msgs/CtrlCommand.h>
@@ -70,6 +71,10 @@ class LQRController
   Eigen::Matrix<double, 3, 1> f_biases_;
   std::thread bias_handler_thread_;
   
+  /*Dynamic mass estimation and compensation */
+  bool enable_dyn_mass_correction_;
+  bool enable_dyn_mass_estimation_;
+  
   public:
     LQRController( BiasEstimator & );
     void initLqrSystem();
@@ -91,4 +96,8 @@ class LQRController
 
     /* helper function to calculate yaw error */
     inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
+    
+    /* estimate actual mass in flight */
+    void estimateMass( const Eigen::Matrix<double, 4, 1> &, ros::Time & );
+    ros::Publisher est_mass_pub_;
 };
