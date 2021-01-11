@@ -23,7 +23,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   else if( state_source_ == "asctec" )
     initAsctecManager();
   else if (state_source_ == "apm" )
-    initApmManager();
+    initPixhawkManager();
   else if( state_source_ == "onboard_camera" )
     initCameraManager();
 
@@ -98,12 +98,21 @@ void StateManager::initAsctecManager()
                                 &StateManager::asctecDataCallback, this );
 }
 
-void StateManager::initApmManager()
+void StateManager::initPixhawkManager()
 {
-  mavros_gps_sub_ = nh_.subscribe( "/mavros/global_position/global", 1,
-                                &StateManager::mavrosGpsCallback, this );
-  mavros_vel_sub_ = nh_.subscribe( "/mavros/global_position/gp_vel", 1,
-                                &StateManager::mavrosGpsVelCallback, this );
+  have_arming_origin_ = false;
+  mavros_gpsraw_sub_ = nh_.subscribe( "/mavros/global_position/global", 1,
+                                &StateManager::mavrosGpsRawCallback, this );
+  mavros_gpsodom_sub_ = nh_.subscribe( "/mavros/global_position/local", 1,
+                                &StateManager::mavrosGpsOdomCallback, this,
+                                ros::TransportHints().tcpNoDelay() );
+  mavros_rtk_sub_ = nh_.subscribe( "/ublox_f9p_rtkbaseline", 1,
+                                &StateManager::mavrosRtkBaselineCallback, this );
+  compass_sub_ = nh_.subscribe( "/mavros/global_position/compass_hdg", 1, 
+				                &StateManager::mavrosCompassCallback, this );
+				                
+  maplock_srv_ = nh_.advertiseService( "/lock_arming_mapframe", 
+                        &StateManager::maplockArmingHandler, this );
 }
 
 void StateManager::initCameraManager()

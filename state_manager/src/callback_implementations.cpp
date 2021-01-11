@@ -74,7 +74,7 @@ void StateManager::viconCallback( const TFStamped::ConstPtr &msg )
   last_yaw_ = yaw;
   
   /* Copy over and publish right away */
-  freyja_msgs::CurrentState state_msg;
+  static freyja_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];
@@ -152,11 +152,12 @@ void StateManager::asctecDataCallback( const freyja_msgs::AsctecData::ConstPtr &
   state_pub_.publish( state_msg );
 }
 
-void StateManager::mavrosGpsCallback( const sensor_msgs::NavSatFix::ConstPtr& msg )
+void StateManager::mavrosGpsRawCallback( const sensor_msgs::NavSatFix::ConstPtr& msg )
 {
+  /*
   if( msg -> status.status >= 0 && !have_location_fix_ )
   {
-    /* first location fix */
+    // first location fix
     home_lat_ = msg -> latitude;
     home_lon_ = msg -> longitude;
     have_location_fix_ = true;
@@ -167,30 +168,88 @@ void StateManager::mavrosGpsCallback( const sensor_msgs::NavSatFix::ConstPtr& ms
 
   state_vector_[0] = ( (msg->latitude)/10000000.0 - home_lat_ )*111050.51;
   state_vector_[1] = ( (msg->longitude)/10000000.0 - home_lon_ )*84356.28;
-
+  */
 }
 
-void StateManager::mavrosGpsVelCallback( const TwStamped::ConstPtr &msg )
+
+
+void StateManager::mavrosCompassCallback( const std_msgs::Float64::ConstPtr &msg )
 {
-  if( !have_location_fix_ )
+  compass_yaw_ = msg -> data;
+}
+
+void StateManager::mavrosGpsOdomCallback( const nav_msgs::Odometry::ConstPtr &msg )
+{
+  /* Callback for odometry direct from the Pixhawk.
+  Note that this is Pixhawk's best estimate of where it is in the world,
+  there is no need to filter it, only structure it to our format.
+  Likely topics:
+        /mavros/global_position/local --> does not zero at arming.
+        /mavros/local_position/local  --> zeros at arming, has IMU frame quirk.
+  */
+  
+  static double pn, pe, pd, vn, ve, vd;
+  
+  // update containers anyway (needed for capturing arming location)
+  gps_odom_pn_ = msg -> pose.pose.position.y;
+  gps_odom_pe_ = msg -> pose.pose.position.x;
+  gps_odom_pd_ = -( msg -> pose.pose.position.z );
+  
+  if( !have_arming_origin_ )
+  {
+    ROS_INFO_THROTTLE( 5, "StateManager:: Waiting for arming .." );
     return;
+  }
   
-  double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
+  // armed at this point
+  pn = gps_odom_pn_ + map_rtk_pn_ - arming_gps_pn_;
+  pe = gps_odom_pe_ + map_rtk_pe_ - arming_gps_pe_;
+  pd = gps_odom_pd_ + map_rtk_pd_ - arming_gps_pd_;
   
-  state_vector_[3] = msg -> twist.linear.x;
-  state_vector_[4] = msg -> twist.linear.y;
-  state_vector_[5] = msg -> twist.linear.z;
+  vn = msg -> twist.twist.linear.y;
+  ve = msg -> twist.twist.linear.x;
+  vd = -( msg -> twist.twist.linear.z );
   
-  state_vector_[12] = time_since;
+  static freyja_msgs::CurrentState state_msg;
+  state_msg.state_vector[0] = pn;
+  state_msg.state_vector[1] = pe;
+  state_msg.state_vector[2] = pd;
+  state_msg.state_vector[3] = vn;
+  state_msg.state_vector[4] = ve;
+  state_msg.state_vector[5] = vd;
+  state_msg.state_vector[8] = DEG2RAD( compass_yaw_ );
   
-  lastUpdateTime_ = ros::Time::now();
-
-  freyja_msgs::CurrentState state_msg;
   state_msg.header.stamp = ros::Time::now();
-  for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
-    state_msg.state_vector[idx] = state_vector_[idx];
   state_pub_.publish( state_msg );
+}
 
+
+void StateManager::mavrosRtkBaselineCallback( const geometry_msgs::Vector3::ConstPtr &msg )
+{
+  rtk_baseoffset_pn_ = msg -> x;
+  rtk_baseoffset_pe_ = msg -> y;
+  rtk_baseoffset_pd_ = msg -> z;
+}
+
+bool StateManager::maplockArmingHandler( BoolServReq& rq, BoolServRsp& rp )
+{
+  /*  Service handler for when the vehicle is armed or disarmed.
+     This must lock in/release all the map offsets needed by manager.
+  */
+  if( !have_arming_origin_ )
+  {
+    lockArmingGps();  // set this locatin as origin
+    lockMapRTK();     // capture current offset from rtk base (zero if no rtk)
+    have_arming_origin_ = true;
+    ROS_WARN( "StateManager::Origin set, locking RTK map-frame!" );
+  }
+  else
+  {
+    lockArmingGps( false );
+    lockMapRTK( false );
+    have_arming_origin_ = false;
+    ROS_WARN( "StateManager::Origin cleared, unlocking RTK map-frame!" );
+  }
 }
 
 void StateManager::cameraUpdatesCallback( const CameraOdom::ConstPtr &msg )
