@@ -68,6 +68,10 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   
   f_biases_ << 0.0, 0.0, 0.0;
   
+  /* Differential flatness feed-forward accelerations */
+  priv_nh_.param( "enable_flatness_ff", enable_flatness_ff_, bool(false) );
+  reference_ff_ << 0.0, 0.0, 0.0, 0.0;
+  
   
   /* Mass estimation */
   enable_dyn_mass_correction_ = false;
@@ -187,6 +191,7 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
   reference_state_ << msg->pn, msg->pe, msg->pd, msg->vn, msg->ve, msg->vd, msg->yaw;
   reference_state_mutex_.unlock();
   
+  reference_ff_ << msg->an, msg->ae, msg->ad, 0.0;    // only NED accelerations
   have_reference_update_ = true;
 }
 
@@ -216,7 +221,8 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   else
   {
     /* Compute control inputs (accelerations, in this case) */
-    control_input = -1 * lqr_K_ * reduced_state_;
+    control_input = -1 * lqr_K_ * reduced_state_ 
+                    + static_cast<double>(enable_flatness_ff_) * reference_ff_;
   
     /* Force saturation on downward acceleration */
     control_input(2) = std::min( control_input(2), 8.0 );

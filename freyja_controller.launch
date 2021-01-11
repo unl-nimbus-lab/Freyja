@@ -20,8 +20,9 @@
   <arg name="use_waypoint_handler"      default="false" />
 
   <!-- advanced settings -->
-  <arg name="use_velctrl_only"          default="false"/>
+  <arg name="use_velctrl_only"          default="false" />
   <arg name="bias_compensation"         default="false" />
+  <arg name="enable_flatness_ff"        default="false" />
 
   <!-- Used for examples -->
   <arg name="use_examples"              default="false"/>
@@ -49,6 +50,7 @@
   	<param name="bias_compensation"   type="string" value="$(arg bias_compensation)" />
   	<param name="mass_estimation"     type="bool"   value="true" />
   	<param name="mass_correction"     type="bool"   value="false" />
+  	<param name="enable_flatness_ff"  type="bool"   value="$(arg enable_flatness_ff)" />
   </node>
   
   <node name="lqr_vel_controller" pkg="lqr_control" type="lqr_vel_ctrl_node"
@@ -77,8 +79,12 @@
 
 
   <!-- handler for discrete waypoints -->
-  <node name="waypoint_manager" pkg="waypoint_manager" type="waypoint_manager_node" output="screen"
-				if="$(eval use_waypoint_handler)"> 
+  <node name="waypoint_manager" pkg="waypoint_manager" type="waypoint_manager_node"
+        output="screen"  if="$(eval use_waypoint_handler and not use_examples)"> 
+    <param name="init_pn"       type="double"     value="0.0" />
+    <param name="init_pe"       type="double"     value="0.0" />
+    <param name="init_pd"       type="double"     value="-0.5" />
+    <param name="init_yaw"      type="double"     value="0.0" />
 	</node>
 
 
