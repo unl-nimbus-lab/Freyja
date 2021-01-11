@@ -109,13 +109,14 @@ void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
   {
     vehicle_armed_ = true;
     lockreq.request.data = true;
+    map_lock.call( lockreq );
   }
   else if( msg->armed == false && vehicle_armed_ )
   {
     vehicle_armed_ = false;
     lockreq.request.data = false;
+    map_lock.call( lockreq );
   }
-  map_lock.call( lockreq );
   
   /* call bias compensation service when switching in/out of computer */
   std_srvs::SetBool biasreq;
@@ -123,13 +124,14 @@ void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
   {
     in_comp_mode_ = true;
     biasreq.request.data = true;
+    bias_comp.call( biasreq );
   }
   else if( msg->mode != "CMODE(25)" && in_comp_mode_ )
   {
     in_comp_mode_ = false;
     biasreq.request.data = false;
+    bias_comp.call( biasreq );
   }
-  bias_comp.call( biasreq );
 }
 
 

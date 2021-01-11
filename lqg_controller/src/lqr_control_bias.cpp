@@ -64,6 +64,8 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   else if( _bcomp == "auto" || _bcomp == "off" )
     bias_compensation_req_ = false;               // off, or on by service call
   
+  bias_compensation_off_ = (_bcomp == "off")? true : false;   // always off
+  
   f_biases_ << 0.0, 0.0, 0.0;
   
   
@@ -112,16 +114,22 @@ void LQRController::initLqrSystem()
 
 bool LQRController::biasEnableServer( BoolServReq& rq, BoolServRsp& rp )
 {
+  if( bias_compensation_off_ )
+  {
+    ROS_WARN( "LQR: Bias compensation remains off throughout." );
+    return false;       // service unsuccessful
+  }
+  
   bias_compensation_req_ = rq.data;
   if( bias_compensation_req_ )
   {
     ROS_WARN( "LQR: Bias compensation active!" );
-    bias_est_.markEnabled();
+    bias_est_.enable();
   }
   else
   {
     ROS_WARN( "LQR: Bias compensation inactive!" );
-    bias_est_.clearBiases();
+    bias_est_.disable();
   }
   return true;  // service successful
 }
@@ -158,7 +166,7 @@ void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &ms
     rsmtx.lock();
     reduced_state_.head<6>() = current_state.head<6>() - reference_state_.head<6>();
     /* yaw-error is done differently */
-    reduced_state_(6) = calcYawError( reduced_state_(6), reference_state_(6) );
+    reduced_state_(6) = calcYawError( current_state_(6), reference_state_(6) );
     rsmtx.unlock();
   }
   

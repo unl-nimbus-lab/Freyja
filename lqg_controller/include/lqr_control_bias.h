@@ -68,6 +68,7 @@ class LQRController
   /* Bias estimator reference object */
   BiasEstimator &bias_est_;
   bool bias_compensation_req_;
+  bool bias_compensation_off_;
   Eigen::Matrix<double, 3, 1> f_biases_;
   std::thread bias_handler_thread_;
   

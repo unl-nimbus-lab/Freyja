@@ -42,7 +42,7 @@ BiasEstimator::BiasEstimator() : nh_(), priv_nh_("~")
   
     Use thread libraries instead:
   */
-
+  estimator_off_ = false;
   state_propagation_alive_ = true;
   n_stprops_since_update_ = 0;
   last_prop_t_ = std::chrono::high_resolution_clock::now();
@@ -80,10 +80,10 @@ void BiasEstimator::initEstimatorSystem()
 
   /* Numbers pulled out of a magical hat only available to the deserving few */
   proc_noise_Q_ << 0.1*IDEN3x3, ZERO3x3, ZERO3x3,
-                   ZERO3x3, 0.1*IDEN3x3, ZERO3x3,
-                   ZERO3x3, ZERO3x3, 0.5*IDEN3x3;
-  meas_noise_R_ << 0.25*IDEN3x3, ZERO3x3,
-                   ZERO3x3, 0.5*IDEN3x3;
+                   ZERO3x3, 0.2*IDEN3x3, ZERO3x3,
+                   ZERO3x3, ZERO3x3, 0.8*IDEN3x3;
+  meas_noise_R_ << 0.2*IDEN3x3, ZERO3x3,
+                   ZERO3x3, 0.3*IDEN3x3;
 
   meas_matrix_C_ << IDEN3x3, ZERO3x3, ZERO3x3,
                     ZERO3x3, IDEN3x3, ZERO3x3;
@@ -131,17 +131,22 @@ void BiasEstimator::state_propagation( )
     {
       /* don't use stale ctrl_input_u_ for some reason */
       n_stprops_since_update_++;
-      if( n_stprops_since_update_ > 3 )
-        ctrl_input_u_ << 0.0, 0.0, 0.0;
+      if( estimator_off_ || n_stprops_since_update_ > 3 )
+      {
+        ctrl_input_u_ << 0.0, 0.0, 0.0;   // clear ctrl until further update
+        best_estimate_ = best_estimate_;  // do not propagate
+      }
+      else
+      {
+        /* propagate state forward */
+        best_estimate_ = sys_A_ * best_estimate_ +
+                         sys_B_ * (ctrl_input_u_.cwiseProduct(input_shaping));
+        state_cov_P_ = sys_A_*state_cov_P_*sys_A_t_ + proc_noise_Q_;
 
-      /* propagate state forward */
-      best_estimate_ = sys_A_ * best_estimate_ +
-                       sys_B_ * (ctrl_input_u_.cwiseProduct(input_shaping));
-      state_cov_P_ = sys_A_*state_cov_P_*sys_A_t_ + proc_noise_Q_;
-
-      /* only clip estimated bias accelerations */
-      best_estimate_.block<3,1>(6,0) = BIAS_LIM_ABS.cwiseMin(
+        /* only clip estimated bias accelerations */
+        best_estimate_.block<3,1>(6,0) = BIAS_LIM_ABS.cwiseMin(
                       best_estimate_.block<3,1>(6,0).cwiseMax(-BIAS_LIM_ABS) );
+      }
       
       /* fill state information: this will be unrolled by gcc */
       for( int idx=0; idx < nStates; idx++ )

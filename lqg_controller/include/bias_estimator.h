@@ -54,6 +54,7 @@ class BiasEstimator
   
   /* parameters */
   int estimator_rate_, estimator_period_us_;
+  bool estimator_off_;
 
   /* prevent state propagation when other callbacks are happening */
   std::mutex state_prop_mutex_;
@@ -96,11 +97,16 @@ class BiasEstimator
     void getEstimatedBiases( Eigen::Matrix<double, 3, 1> & );
     
     /* set and reset accessors */
-    inline void markEnabled() { t_estimator_on_ = ClockTime::now(); }
-    inline void clearBiases()
+    inline void enable()
+    {
+      t_estimator_on_ = ClockTime::now();
+      estimator_off_ = false;
+    }
+    inline void disable()
     {
       best_estimate_.tail<3>() << 0.0, 0.0, 0.0;
       estimator_output_shaping_ = 0.0;
+      estimator_off_ = true;
     }
     
     /* Time constant calc */
