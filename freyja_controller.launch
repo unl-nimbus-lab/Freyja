@@ -1,28 +1,35 @@
 <launch>
   <!-- vim: set ft=xml noet : -->
-	
+
   <!-- Common launch file for Freyja.
-  Supports both AscTec and Pixhawk-based vehicles. Can
-  also do velocity-only control (ignores position refs).
+    Supports both AscTec and Pixhawk-based vehicles. Can
+    also do velocity-only control (ignores position refs).
     ~ aj // Nimbus Lab.
   -->
 
-  <!-- allowed autopilots: "asctec" or "arducopter" --> 
-  <!-- must provide vicon_topic -->
-  <arg name="autopilot"       default="arducopter"/>
-  <arg name="vicon_topic"/>
+  <!-- allowed autopilots: "asctec" or "arducopter" -->
+  <arg name="autopilot"                 default="arducopter" />
+  <arg name="vicon_topic" />
+
   <!-- use "device:baudrate" for apm, "device" for asctec -->
-  <arg name="comm_port"       default="/dev/ttyUSB0:57600"/>
-  <arg name="total_mass"      default="0.95"/>
-  <arg name="thrust_scaler"   default="200.0"/>
-	
-  <!-- true if providing your own trajectory source -->
-  <arg name="use_external_trajectory" default="false"/>
-  <arg name="use_velctrl_only" default="false"/>
-  <arg name="bias_compensation" default="auto" />
-  <arg name="start_rosbag" default="false"/>
-	
-	
+  <arg name="comm_port"                 default="/dev/ttyUSB0:57600"/>
+  <arg name="total_mass"                default="0.95"/>
+  <arg name="thrust_scaler" 		        default="200.0"/>
+
+  <!-- launch a handler for discrete waypoints -->
+  <arg name="use_waypoint_handler"      default="false" />
+
+  <!-- advanced settings -->
+  <arg name="use_velctrl_only"          default="false"/>
+  <arg name="bias_compensation"         default="false" />
+
+  <!-- Used for examples -->
+  <arg name="use_examples"              default="false"/>
+  <arg name="example_number"            default="0" />
+
+  <arg name="start_rosbag"              default="false" />
+
+
   <!-- state source can be: "apm", "asctec", "vicon" or "onboard_camera" -->
   <!-- implemented filters: "median", "gauss" and "lwma" -->
   <node name="state_manager" pkg="state_manager" type="state_manager_node">
@@ -31,23 +38,17 @@
     <param name="vicon_topic"   type="string"   value="$(arg vicon_topic)" />
   </node>
 
-  <!-- an example trajectory node for reference -->
-  <node name="trajectory_provider" pkg="freyja_trajectory_provider" type="trajectory_provider_node"
-        if="$(eval not use_external_trajectory)">
-    <!-- "hover", "circle1", "circle2", "circle3" -->
-    <param name="example_traj_type" type="string" value="hover"/>
-  </node>
-  
+
   <!-- control node (see velctrl flag above) -->
   <node name="lqg_controller" pkg="lqg_control" type="lqg_control_node"
   			output="screen" if="$(eval not use_velctrl_only)">
-	  <param name="controller_rate"   type="int"    value="45"  />
-  	<param name="total_mass"        type="double" value="$(arg total_mass)"/>
-  	<param name="use_stricter_gains" type="bool"  value="false" />
-  	<param name="estimator_rate"    type="int"    value="50" />
-  	<param name="bias_compensation" type="string" value="$(arg bias_compensation)" />
-  	<param name="mass_estimation"   type="bool"   value="true" />
-  	<param name="mass_correction"   type="bool"   value="false" />
+	  <param name="controller_rate"     type="int"    value="45"  />
+  	<param name="total_mass"          type="double" value="$(arg total_mass)"/>
+  	<param name="use_stricter_gains"  type="bool"   value="false" />
+  	<param name="estimator_rate"      type="int"    value="50" />
+  	<param name="bias_compensation"   type="string" value="$(arg bias_compensation)" />
+  	<param name="mass_estimation"     type="bool"   value="true" />
+  	<param name="mass_correction"     type="bool"   value="false" />
   </node>
   
   <node name="lqr_vel_controller" pkg="lqr_control" type="lqr_vel_ctrl_node"
@@ -56,9 +57,10 @@
     <param name="total_mass"        type="double" value="$(arg total_mass)" />
   </node>
 
+
   <!-- autopilot communication node -->
   <node name="asctec_handler" pkg="asctec_handler" type="asctec_handler_node"
-  			if="$(eval autopilot=='asctec')">
+        if="$(eval autopilot=='asctec')">
     <param name="serial_port" value="/dev/ttyUSB0" />
   </node>
   
@@ -67,11 +69,25 @@
     <node name="apm_handler" pkg="apm_handler" type="apm_handler_node">
       <param name="thrust_scaler" type="double" value="$(arg thrust_scaler)" />
     </node>
+
     <include file="$(find freyja_configfiles)/apm_nimbus.launch">
       <arg name="fcu_url" value="$(arg comm_port)"/>
     </include>
   </group>
+
+
+  <!-- handler for discrete waypoints -->
+  <node name="waypoint_manager" pkg="waypoint_manager" type="waypoint_manager_node" output="screen"
+				if="$(eval use_waypoint_handler)"> 
+	</node>
+
+
+  <!-- examples -->
+  <include file="$(find freyja_examples)/launch/example.launch" if="$(eval use_examples)" >
+    <arg name="example_number" value="$(arg example_number)"/>
+  </include>
   
   <!-- record stuff -->
   <node name="recorder" pkg="rosbag" type="record" args="-a" if="$(eval start_rosbag)"/>
+  
 </launch>

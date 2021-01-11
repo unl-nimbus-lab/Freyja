@@ -166,7 +166,7 @@ void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &ms
     rsmtx.lock();
     reduced_state_.head<6>() = current_state.head<6>() - reference_state_.head<6>();
     /* yaw-error is done differently */
-    reduced_state_(6) = calcYawError( current_state_(6), reference_state_(6) );
+    reduced_state_(6) = calcYawError( current_state(6), reference_state_(6) );
     rsmtx.unlock();
   }
   
