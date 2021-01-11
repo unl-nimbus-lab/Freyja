@@ -19,6 +19,8 @@
 #include <freyja_msgs/CurrentStateBiasEst.h>
 
 typedef std::chrono::microseconds uSeconds;
+typedef std::chrono::high_resolution_clock ClockTime;
+typedef std::chrono::time_point<ClockTime> ClockTimePoint;
 
 const int nStates = 9;
 const int nCtrl = 3;
@@ -33,7 +35,7 @@ class BiasEstimator
   Eigen::Matrix<double, nStates, nCtrl> sys_B_;
   
   Eigen::Matrix<double, nStates, 1> best_estimate_;
-  Eigen::Matrix<double, nCtrl, 1> ctrl_input_u_, prev_ctrl_input_;
+  Eigen::Matrix<double, nCtrl, 1> ctrl_input_u_;
   Eigen::Matrix<double, nMeas, 1> measurement_z_;
 
   /* KF matrices */
@@ -52,19 +54,25 @@ class BiasEstimator
   
   /* parameters */
   int estimator_rate_, estimator_period_us_;
+  bool estimator_off_;
 
   /* prevent state propagation when other callbacks are happening */
   std::mutex state_prop_mutex_;
   std::thread state_prop_thread_;
   volatile bool state_propagation_alive_;
   volatile int n_stprops_since_update_;
-  int n_stprops_allowed_;
   
   std::thread st_upd_thread_;
   
   /* timing related objects */
-  std::chrono::time_point<std::chrono::high_resolution_clock> ts, te, last_prop_t_;
+  ClockTimePoint ts, te, last_prop_t_;
   std::chrono::duration<double> prop_interval_;
+  
+  /* smooth-in the estimator using a time-constant factor */
+  double estimator_tc_;
+  double estimator_output_shaping_;
+  ClockTimePoint t_estimator_on_;
+  std::chrono::duration<double> tc_interval_;
 
   /* final ros data published */
   freyja_msgs::CurrentStateBiasEst state_msg_;
@@ -87,6 +95,29 @@ class BiasEstimator
     void setMeasurement( const Eigen::Matrix<double, 6, 1> & );
     void setControlInput( const Eigen::Matrix<double, 4, 1> & );
     void getEstimatedBiases( Eigen::Matrix<double, 3, 1> & );
+    
+    /* set and reset accessors */
+    inline void enable()
+    {
+      t_estimator_on_ = ClockTime::now();
+      estimator_off_ = false;
+    }
+    inline void disable()
+    {
+      best_estimate_.tail<3>() << 0.0, 0.0, 0.0;
+      estimator_output_shaping_ = 0.0;
+      estimator_off_ = true;
+    }
+    
+    /* Time constant calc */
+    inline void updateOutputShapingFactor()
+    {
+      /* Output shaping as a cubic polynomial of time since ON */
+      auto tnow = ClockTime::now();
+      tc_interval_ = tnow - t_estimator_on_;
+      double t_ratio = tc_interval_.count() / estimator_tc_;
+      estimator_output_shaping_ = std::min( 1.0, t_ratio * t_ratio * t_ratio );
+    }
 };
 
 /*

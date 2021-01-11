@@ -25,10 +25,13 @@ BiasEstimator::BiasEstimator() : nh_(), priv_nh_("~")
                               ( output_topic, 1, true );
 
   /* Parameters for thread */
-  int estimator_rate_default = 70;
+  int estimator_rate_default = 10;
   priv_nh_.param( "estimator_rate", estimator_rate_, estimator_rate_default );
   estimator_period_us_ = std::round( (1.0/estimator_rate_)*1000*1000 );
-  n_stprops_allowed_ = 2.5;
+  
+  /* Time constant  factor */
+  estimator_tc_ = 1.5;
+  estimator_output_shaping_ = 0.0;
   
   /* init estimator matrices */
   initEstimatorSystem();
@@ -39,7 +42,7 @@ BiasEstimator::BiasEstimator() : nh_(), priv_nh_("~")
   
     Use thread libraries instead:
   */
-
+  estimator_off_ = false;
   state_propagation_alive_ = true;
   n_stprops_since_update_ = 0;
   last_prop_t_ = std::chrono::high_resolution_clock::now();
@@ -58,29 +61,29 @@ void BiasEstimator::initEstimatorSystem()
   float dt = 1.0/estimator_rate_;
   float dt2 = dt*dt/2.0;
   
-  sys_A_ << 1.0, 0.0, 0.0, dt, 0.0, 0.0, -dt2, 0.0, 0.0, 
-            0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, -dt2, 0.0,
-            0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, -dt2,
-            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -dt, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -dt, 0.0,
-            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -dt,
+  sys_A_ << 1.0, 0.0, 0.0, dt, 0.0, 0.0, dt2, 0.0, 0.0, 
+            0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, dt2, 0.0,
+            0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, dt2,
+            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt,
             Eigen::MatrixXd::Zero(3,6), Eigen::MatrixXd::Identity(3,3);
   sys_A_t_ = sys_A_.transpose();
 
-  sys_B_ << 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0,
-            1.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0,
+  sys_B_ << dt2, 0.0, 0.0,
+            0.0, dt2, 0.0,
+            0.0, 0.0, dt2,
+             dt, 0.0, 0.0,
+            0.0,  dt, 0.0,
+            0.0, 0.0,  dt,
             Eigen::MatrixXd::Zero(3,3);
 
   /* Numbers pulled out of a magical hat only available to the deserving few */
   proc_noise_Q_ << 0.1*IDEN3x3, ZERO3x3, ZERO3x3,
                    ZERO3x3, 0.2*IDEN3x3, ZERO3x3,
-                   ZERO3x3, ZERO3x3, 1.0*IDEN3x3;
+                   ZERO3x3, ZERO3x3, 0.8*IDEN3x3;
   meas_noise_R_ << 0.2*IDEN3x3, ZERO3x3,
-                   ZERO3x3, 2.5*IDEN3x3;
+                   ZERO3x3, 0.3*IDEN3x3;
 
   meas_matrix_C_ << IDEN3x3, ZERO3x3, ZERO3x3,
                     ZERO3x3, IDEN3x3, ZERO3x3;
@@ -92,7 +95,6 @@ void BiasEstimator::initEstimatorSystem()
   // guess some initial state 
   best_estimate_ << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
   ctrl_input_u_ << 0.0, 0.0, 0.0;
-  prev_ctrl_input_ << 0.0, 0.0, 0.0;
   
   // convenience
   I9x9 = Eigen::MatrixXd::Identity(9,9); 
@@ -104,6 +106,10 @@ void BiasEstimator::initEstimatorSystem()
 __attribute__((optimize("unroll-loops")))
 void BiasEstimator::state_propagation( )
 {
+  Eigen::Matrix<double, 3, 1> input_shaping;  // % of input to consider
+  input_shaping << 0.95, 0.95, 0.95;
+  Eigen::Matrix<double, 3, 1> BIAS_LIM_ABS;   // clip limits (acceleration)
+  BIAS_LIM_ABS << 2.0, 2.0, 3.0;
   while( ros::ok() )
   {
     /* Mark start(ts) and end(te) times for precise timing */
@@ -113,7 +119,7 @@ void BiasEstimator::state_propagation( )
     
     /* Fill in actual dt, don't assume fixed intervals */
     timing_matrix_ << 0.5*delta_t*delta_t * I3x3,
-                           delta_t * I3x3;
+                      delta_t * I3x3;
     sys_A_.block<3,3>(0, 3) = delta_t * I3x3;
     sys_A_.topRightCorner<6,3>() = timing_matrix_;
     sys_B_.block<6,3>(0, 0) =  timing_matrix_;
@@ -123,19 +129,26 @@ void BiasEstimator::state_propagation( )
     std::unique_lock<std::mutex> spmtx( state_prop_mutex_, std::defer_lock );
     if( spmtx.try_lock() )
     {
-      /* smooth with an artificial input shaping ratio */
+      /* don't use stale ctrl_input_u_ for some reason */
       n_stprops_since_update_++;
-      //double input_shaping_ratio = 1.0/(n_stprops_since_update_+1);
-      double input_shaping_ratio = (double)n_stprops_since_update_/(n_stprops_allowed_+1);
-      if( n_stprops_since_update_ > 2 )
-        ctrl_input_u_ << 0.0, 0.0, 0.0;
+      if( estimator_off_ || n_stprops_since_update_ > 3 )
+      {
+        ctrl_input_u_ << 0.0, 0.0, 0.0;   // clear ctrl until further update
+        best_estimate_ = best_estimate_;  // do not propagate
+      }
+      else
+      {
+        /* propagate state forward */
+        best_estimate_ = sys_A_ * best_estimate_ +
+                         sys_B_ * (ctrl_input_u_.cwiseProduct(input_shaping));
+        state_cov_P_ = sys_A_*state_cov_P_*sys_A_t_ + proc_noise_Q_;
 
-      /* propagate state forward */
-      best_estimate_ = sys_A_ * best_estimate_ +
-                       sys_B_ * ctrl_input_u_ * input_shaping_ratio;
-      state_cov_P_ = sys_A_*state_cov_P_*sys_A_t_ + proc_noise_Q_;
-
-      /* put out debug info: this will be unrolled by gcc */
+        /* only clip estimated bias accelerations */
+        best_estimate_.block<3,1>(6,0) = BIAS_LIM_ABS.cwiseMin(
+                      best_estimate_.block<3,1>(6,0).cwiseMax(-BIAS_LIM_ABS) );
+      }
+      
+      /* fill state information: this will be unrolled by gcc */
       for( int idx=0; idx < nStates; idx++ )
         state_msg_.state_vector[idx] = best_estimate_(idx);
       spmtx.unlock();
@@ -145,10 +158,11 @@ void BiasEstimator::state_propagation( )
 
       last_prop_t_ = te = std::chrono::high_resolution_clock::now();
       int dt = std::chrono::duration_cast<uSeconds>(te-ts).count();
+      
       /* Fill in extra debug information: subject to change */
-      state_msg_.state_vector[9] = n_stprops_since_update_;
+      state_msg_.state_vector[9] = static_cast<double>(n_stprops_since_update_);
       state_msg_.state_vector[10] = delta_t;
-      //state_msg_.state_vector[11] = state_cov_P_.diagonal().norm();
+      //state_msg_.state_vector[10] = state_cov_P_.diagonal().norm();
       state_msg_.state_vector[11] = ctrl_input_u_.norm();
       bias_pub_.publish( state_msg_ );
 
@@ -180,7 +194,9 @@ void BiasEstimator::state_updation()
 void BiasEstimator::setMeasurement( const Eigen::Matrix<double, 6, 1> &m )
 {
   measurement_z_ = m;
-  state_updation();
+  n_stprops_since_update_ = 0;
+  st_upd_thread_ = std::thread( &BiasEstimator::state_updation, this );
+  st_upd_thread_.detach();
 }
 
 void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c )
@@ -189,12 +205,15 @@ void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c )
     ctrl_input_u_[0] = c[0];
     ctrl_input_u_[1] = c[1];
     ctrl_input_u_[2] = c[2] + 9.81;
-    n_stprops_since_update_ = 0;
   state_prop_mutex_.unlock();
 }
 void BiasEstimator::getEstimatedBiases( Eigen::Matrix<double, 3, 1> &eb )
 {
   // return 3 elements starting at 6: bn, be, bd.
-  eb = best_estimate_.block<3,1>(6,0);
+  if( estimator_output_shaping_ > 0.95 )
+    estimator_output_shaping_ = 1.0;
+  else
+    updateOutputShapingFactor();
+  eb = estimator_output_shaping_ * best_estimate_.tail<3>();
 }
 

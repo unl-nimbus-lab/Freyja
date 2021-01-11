@@ -97,59 +97,77 @@ void sendToMavros( const double &p, const double &r, const double &y, const doub
   atti_pub.publish( atti_tgt );
 }
 
-ros::ServiceClient rtkmap_lock;
-ros::ServiceClient iscompsrv;
+ros::ServiceClient map_lock;
+ros::ServiceClient bias_comp;
 bool vehicle_armed_ = false;
-bool in_cmode_ = false;
+bool in_comp_mode_ = false;
 void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
 {
+  /* call map lock/unlock service when arming/disarming */
+  std_srvs::SetBool lockreq;
   if( msg->armed == true && !vehicle_armed_ )
   {
     vehicle_armed_ = true;
-    std_srvs::SetBool lockrtk;
-    lockrtk.request.data = true;
-    rtkmap_lock.call( lockrtk );
-    ROS_WARN( "Locking rtk map.. " );
+    lockreq.request.data = true;
+    map_lock.call( lockreq );
   }
   else if( msg->armed == false && vehicle_armed_ )
   {
     vehicle_armed_ = false;
-    std_srvs::SetBool lockrtk;
-    lockrtk.request.data = false;
-    rtkmap_lock.call( lockrtk );
-    ROS_WARN( "Unlocking rtk map .." );
+    lockreq.request.data = false;
+    map_lock.call( lockreq );
+  }
+  
+  /* call bias compensation service when switching in/out of computer */
+  std_srvs::SetBool biasreq;
+  if( msg->mode == "CMODE(25)" && !in_comp_mode_ )
+  {
+    in_comp_mode_ = true;
+    biasreq.request.data = true;
+    bias_comp.call( biasreq );
+  }
+  else if( msg->mode != "CMODE(25)" && in_comp_mode_ )
+  {
+    in_comp_mode_ = false;
+    biasreq.request.data = false;
+    bias_comp.call( biasreq );
   }
 }
-void rc_callback( const mavros_msgs::RCIn::ConstPtr &msg )
+
+
+void rcdataCallback( const mavros_msgs::RCIn::ConstPtr &msg )
 {
-  if( msg -> channels[5] < 1500 && !in_cmode_ )
+  /*  !!NOTE: mavros can publish a zero length array if no rc.
+    Check array length first, or wrap in try-catch */
+  /*
+  try
   {
-      //if( msg->mode == "CMODE(25)" && !in_cmode_ )
-    in_cmode_ = true;
-    std_srvs::SetBool iscomp;
-    iscomp.request.data = true;
-    iscompsrv.call( iscomp );
+    if( msg -> channels[5] < 1500 )
+    {
+      // do something
+    }
+    else if( msg -> channels[5] >=1500 )
+    {
+      // do something
+    }
   }
-  else if( msg -> channels[5] >=1500 && in_cmode_ )
+  catch( ... )
   {
-    in_cmode_ = false;
-    std_srvs::SetBool iscomp;
-    iscomp.request.data = false;
-    iscompsrv.call( iscomp );
+    // skip
   }
+  
+  */
 }
 
 int main( int argc, char **argv )
 {
   ros::init( argc, argv, ROS_NODE_NAME );
-  
-  ros::NodeHandle nh;
+  ros::NodeHandle nh, priv_nh("~");
   
   /* Load parameters */
-  nh.param( "thrust_scaler", THRUST_SCALER, double(200.0) );
-  nh.param( "min_thrust_clip", THRUST_MIN, double(0.04) );
-  nh.param( "max_thrust_clip", THRUST_MAX, double(1.0) );
-  
+  priv_nh.param( "thrust_scaler", THRUST_SCALER, double(200.0) );
+  priv_nh.param( "min_thrust_clip", THRUST_MIN, double(0.04) );
+  priv_nh.param( "max_thrust_clip", THRUST_MAX, double(1.0) );
   
   atti_pub = nh.advertise <AttiTarget>
                             ( "/mavros/setpoint_raw/attitude", 1, true );
@@ -159,11 +177,11 @@ int main( int argc, char **argv )
   ros::Subscriber mavstate_sub = nh.subscribe
                             ( "/mavros/state", 1, mavrosStateCallback );
   ros::Subscriber mavrc_sub = nh.subscribe
-                            ( "/mavros/rc/in", 1, rc_callback );
+                            ( "/mavros/rc/in", 1, rcdataCallback );
 
-  rtkmap_lock = nh.serviceClient<std_srvs::SetBool>("/set_rtk_mapcorrections");
-  iscompsrv = nh.serviceClient<std_srvs::SetBool>( "/set_bias_compensation");
+  map_lock = nh.serviceClient<std_srvs::SetBool>("/lock_arming_mapframe");
+  bias_comp = nh.serviceClient<std_srvs::SetBool>( "/set_bias_compensation");
   
-  ros::spin();
+  ros::MultiThreadedSpinner(2).spin();
   return 0;
 }

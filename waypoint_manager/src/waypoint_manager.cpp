@@ -60,6 +60,7 @@ class TrajectoryGenerator
 
   Eigen::Matrix<double, 1, 3> segment_gradients_;
   Eigen::Matrix<double, 1, 3> segment_intersection_;
+  Eigen::Matrix<double, 1, 3> segment_vels_;
 
   double yaw_target;
   
@@ -79,6 +80,7 @@ class TrajectoryGenerator
   float init_pn_;
   float init_pe_;
   float init_pd_;
+  float init_yaw_;
   
   int terminal_style_; // 0: posn+vel, 1: posn+vel+acc
   
@@ -115,6 +117,8 @@ TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
   priv_nh_.param( "init_pn", init_pn_, float(0.0) );
   priv_nh_.param( "init_pe", init_pe_, float(0.0) );
   priv_nh_.param( "init_pd", init_pd_, float(-0.75) );
+  priv_nh_.param( "init_yaw", init_yaw_, float(0.0) );
+  init_yaw_ = DEG2RAD( init_yaw_ );
 
   /* unused argument for trajectory shaping */
   priv_nh_.param( "term_style", terminal_style_, int(1) );
@@ -135,7 +139,7 @@ TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
   /* Subscribers */
   current_state_sub_ = nh_.subscribe( "/current_state", 1,
                            &TrajectoryGenerator::currentStateCallback, this );
-  waypoint_sub_ = nh_.subscribe( "/waypoint_state", 1, 
+  waypoint_sub_ = nh_.subscribe( "/discrete_waypoint_target", 1, 
                            &TrajectoryGenerator::waypointCallback, this );
 
   /* Publishers */
@@ -232,6 +236,23 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
   }
 }
 
+void TrajectoryGenerator::trigger_replan_speed( const double &speed )
+{
+  // Get current and target position
+  auto targetpos = final_state_.head<3>();
+  auto currentpos = current_state_.head<3>();
+
+  // x = x0 + (x1 - x0)t ; y = y0 + (y1 - y0)t ; z = z0 + (z1 - z0)t
+  segment_gradients_ = targetpos - currentpos;
+  segment_intersection_ = currentpos;
+
+  // Calculate length
+  double segment_length = (targetpos - currentpos).norm();
+
+  segment_percentage_ = speed / segment_length;
+  segment_vels_ = segment_gradients_ * segment_percentage_;
+}
+
 void TrajectoryGenerator::trigger_replan_time( const double &dt )
 {
   /* TWO STEPS:
@@ -256,21 +277,7 @@ void TrajectoryGenerator::trigger_replan_time( const double &dt )
   update_premult_matrix( dt );
 }
 
-void TrajectoryGenerator::trigger_replan_speed( const double &speed )
-{
-  // Get current and target position
-  auto targetpos = final_state_.head<3>();
-  auto currentpos = current_state_.head<3>();
 
-  // x = x0 + (x1 - x0)t ; y = y0 + (y1 - y0)t ; z = z0 + (z1 - z0)t
-  segment_gradients_ = targetpos - currentpos;
-  segment_intersection_ = currentpos;
-
-  // Calculate length
-  double segment_length = (targetpos - currentpos).norm();
-
-  segment_percentage_ = speed / segment_length;
-}
 
 inline void TrajectoryGenerator::update_premult_matrix( const double &tf )
 {
@@ -339,7 +346,7 @@ void TrajectoryGenerator::trajectoryReference( const ros::TimerEvent &event )
                    segment_intersection_;
 
     tref << new_pos,
-            segment_gradients,
+            segment_vels_,
             0.0, 0.0, 0.0;
 
   }
@@ -371,6 +378,7 @@ void TrajectoryGenerator::publishHoverReference()
     traj_ref_.pn = init_pn_;
     traj_ref_.pe = init_pe_;
     traj_ref_.pd = init_pd_;
+    traj_ref_.yaw = init_yaw_;
   }
   else
   {
@@ -378,13 +386,12 @@ void TrajectoryGenerator::publishHoverReference()
     traj_ref_.pn = final_state_[0];
     traj_ref_.pe = final_state_[1];
     traj_ref_.pd = final_state_[2];
+    traj_ref_.yaw = yaw_target;
   }
   
   traj_ref_.vn = 0.0;
   traj_ref_.ve = 0.0;
   traj_ref_.vd = 0.0;
-  
-  traj_ref_.yaw = yaw_target;
 
   traj_ref_.an = 0.0;
   traj_ref_.ae = 0.0;

@@ -41,7 +41,7 @@ class WaypointTester:
           self._quit = True
 
         # Init all the publishers and subscribers
-        self.attitude_pub = rospy.Publisher("/waypoint_state", WaypointTarget, queue_size=10)
+        self.attitude_pub = rospy.Publisher("/discrete_waypoint_target", WaypointTarget, queue_size=10)
         
         time.sleep(2)
         self.start()
