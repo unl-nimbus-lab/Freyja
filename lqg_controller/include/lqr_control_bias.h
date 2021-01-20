@@ -98,7 +98,7 @@ class LQRController
     void trajectoryReferenceCallback( const TrajRef::ConstPtr & );
 
     /* helper function to calculate yaw error */
-    inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
+    static constexpr inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
     
     /* estimate actual mass in flight */
     void estimateMass( const Eigen::Matrix<double, 4, 1> &, ros::Time & );

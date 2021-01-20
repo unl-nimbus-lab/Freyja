@@ -21,8 +21,8 @@
 
   <!-- advanced settings -->
   <arg name="use_velctrl_only"          default="false" />
-  <arg name="bias_compensation"         default="false" />
   <arg name="enable_flatness_ff"        default="false" />
+  <arg name="bias_compensation"         default="auto" />  <!--auto, on, off-->
 
   <!-- Used for examples -->
   <arg name="use_examples"              default="false"/>

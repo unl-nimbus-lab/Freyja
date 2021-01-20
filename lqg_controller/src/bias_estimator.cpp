@@ -195,8 +195,7 @@ void BiasEstimator::setMeasurement( const Eigen::Matrix<double, 6, 1> &m )
 {
   measurement_z_ = m;
   n_stprops_since_update_ = 0;
-  st_upd_thread_ = std::thread( &BiasEstimator::state_updation, this );
-  st_upd_thread_.detach();
+  state_updation();
 }
 
 void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c )

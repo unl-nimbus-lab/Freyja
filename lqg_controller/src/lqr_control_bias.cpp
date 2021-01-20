@@ -138,7 +138,7 @@ bool LQRController::biasEnableServer( BoolServReq& rq, BoolServRsp& rp )
   return true;  // service successful
 }
 
-double LQRController::calcYawError( const double &a, const double &b )
+constexpr double LQRController::calcYawError( const double &a, const double &b )
 {
   double yd = fmod( a - b + pi, 2*pi );
   yd = yd < 0 ? yd+2*pi : yd;
@@ -172,9 +172,9 @@ void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &ms
     /* yaw-error is done differently */
     reduced_state_(6) = calcYawError( current_state(6), reference_state_(6) );
     rsmtx.unlock();
+    have_state_update_ = true;
   }
   
-  have_state_update_ = true;
   last_state_update_t_ = ros::Time::now();
   
 }
