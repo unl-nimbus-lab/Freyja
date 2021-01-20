@@ -83,7 +83,7 @@ class LQRController
     void initLqrSystem();
     
     ros::Subscriber state_sub_;
-    void stateCallback( const freyja_msgs::CurrentState::ConstPtr & );
+    void stateCallback( const freyja_msgs::CurrentState::ConstPtr & ) __attribute__((hot));
     
     ros::ServiceServer bias_enable_serv_;
     bool biasEnableServer( BoolServReq&, BoolServRsp& );
@@ -92,7 +92,7 @@ class LQRController
     ros::Publisher controller_debug_pub_;
     
     ros::Timer controller_timer_;
-    void computeFeedback( const ros::TimerEvent & );
+    void computeFeedback( const ros::TimerEvent & ) __attribute__((optimize("unroll-loops")));
     
     ros::Subscriber reference_sub_;
     void trajectoryReferenceCallback( const TrajRef::ConstPtr & );

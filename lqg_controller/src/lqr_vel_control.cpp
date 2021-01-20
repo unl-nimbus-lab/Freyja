@@ -166,11 +166,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   debug_msg.lqr_u[1] = control_input(1);
   debug_msg.lqr_u[2] = control_input(2);
   debug_msg.lqr_u[3] = control_input(3);
-  debug_msg.thrust = T;
-  debug_msg.roll = roll;
-  debug_msg.pitch = pitch;
-  debug_msg.yaw = yaw;
-  debug_msg.state_valid = state_valid;
+  debug_msg.flags = state_valid;
   controller_debug_pub_.publish( debug_msg );
   
   /* Actual commanded input */
