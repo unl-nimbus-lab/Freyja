@@ -43,6 +43,7 @@ For bigger projects that involve more packages, prepare your own launch file, an
     <arg name="start_rosbag"              value="false" />
     <arg name="thrust_scaler"             value="100" />
     <arg name="use_waypoint_handler"      value="true" />
+    <!-- see launch file for more available arguments -->
   </include>
   
   <node name="my_traj" pkg="my_trajectory_provider" type="my_glamorous_trajectory" />
@@ -50,10 +51,17 @@ For bigger projects that involve more packages, prepare your own launch file, an
   :
 </launch>  
 ```
-In the example above, the launch argument `use_waypoint_handler` is set to `true` for providing discrete waypoints (and not reference states).
+In the example above, the launch argument `use_waypoint_handler` is set to `true` for providing discrete waypoints (and not reference states). See the launch file for more available arguments.
 
 ## Wiki
 Check out [Freyja's wiki](https://github.com/unl-nimbus-lab/Freyja/wiki) to get more details on everything, from a basic multirotor build, to advanced configuration and set up, all the way to how trajectories can be written.
 
 ## License, Credits and Usage
 Freyja is developed in the [Nimbus Lab](https://nimbus.unl.edu), with rigorous testing under a multitude of operational scenarios and is used internally for various projects. Generous thanks to members who have tested and reported bugs, issues and feature limitations. The software is public under the GNU GPLv3 license. Please use wisely, and recommend improvements!
+
+If you use Freyja for your work, you can site the ICRA 2021 paper that describes it in full detail:
+>```
+>"Freyja: A Full Multirotor System for Agile & Precise Outdoor Flights",
+>A. Shankar, S. Elbaum, C. Detweiler;
+>IEEE International Conference on Robotics and Automation (ICRA), 2021.
+>```
