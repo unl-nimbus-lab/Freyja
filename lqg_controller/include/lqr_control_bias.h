@@ -83,7 +83,7 @@ class LQRController
     void initLqrSystem();
     
     ros::Subscriber state_sub_;
-    void stateCallback( const freyja_msgs::CurrentState::ConstPtr & );
+    void stateCallback( const freyja_msgs::CurrentState::ConstPtr & ) __attribute__((hot));
     
     ros::ServiceServer bias_enable_serv_;
     bool biasEnableServer( BoolServReq&, BoolServRsp& );
@@ -92,13 +92,13 @@ class LQRController
     ros::Publisher controller_debug_pub_;
     
     ros::Timer controller_timer_;
-    void computeFeedback( const ros::TimerEvent & );
+    void computeFeedback( const ros::TimerEvent & ) __attribute__((optimize("unroll-loops")));
     
     ros::Subscriber reference_sub_;
     void trajectoryReferenceCallback( const TrajRef::ConstPtr & );
 
     /* helper function to calculate yaw error */
-    inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
+    static constexpr inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
     
     /* estimate actual mass in flight */
     void estimateMass( const Eigen::Matrix<double, 4, 1> &, ros::Time & );

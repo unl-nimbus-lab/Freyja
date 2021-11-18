@@ -138,7 +138,7 @@ bool LQRController::biasEnableServer( BoolServReq& rq, BoolServRsp& rp )
   return true;  // service successful
 }
 
-double LQRController::calcYawError( const double &a, const double &b )
+constexpr double LQRController::calcYawError( const double &a, const double &b )
 {
   double yd = fmod( a - b + pi, 2*pi );
   yd = yd < 0 ? yd+2*pi : yd;
@@ -149,6 +149,7 @@ void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &ms
 {
   /* Parse message to obtain state and reduced state information */
   static Eigen::Matrix<double, 7, 1> current_state;
+  static Eigen::Matrix<double, 7, 1> state_err;
 
   float yaw = msg->state_vector[8];
   rot_yaw_ << std::cos(yaw), std::sin(yaw), 0,
@@ -168,15 +169,15 @@ void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &ms
   if( have_reference_update_ )
   {
     rsmtx.lock();
-    reduced_state_.head<6>() = current_state.head<6>() - reference_state_.head<6>();
+    state_err.head<6>() = current_state.head<6>() - reference_state_.head<6>();
     /* yaw-error is done differently */
-    reduced_state_(6) = calcYawError( current_state(6), reference_state_(6) );
+    state_err(6) = calcYawError( current_state(6), reference_state_(6) );
     rsmtx.unlock();
+    reduced_state_ = std::move( state_err );
+    have_state_update_ = true;
   }
   
-  have_state_update_ = true;
   last_state_update_t_ = ros::Time::now();
-  
 }
 
 void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
@@ -195,6 +196,7 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
   have_reference_update_ = true;
 }
 
+__attribute__((optimize("unroll-loops")))
 void LQRController::computeFeedback( const ros::TimerEvent &event )
 {
   /* Wait for atleast one update, or architect the code better */
@@ -203,7 +205,8 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   
   float roll, pitch, yaw;
   double T;
-  Eigen::Matrix<double, 4, 1> control_input;
+  static Eigen::Matrix<double, 4, 1> control_input;
+  static Eigen::Matrix<double, 7, 1> state_err;
   
   bool state_valid = true;
   auto tnow = ros::Time::now();
@@ -221,7 +224,8 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   else
   {
     /* Compute control inputs (accelerations, in this case) */
-    control_input = -1 * lqr_K_ * reduced_state_ 
+    state_err = std::move( reduced_state_ );
+    control_input = -1 * lqr_K_ * state_err 
                     + static_cast<double>(enable_flatness_ff_) * reference_ff_;
   
     /* Force saturation on downward acceleration */
@@ -245,20 +249,6 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
     yaw = control_input(3);
   }
   
-  /* Debug information */
-  freyja_msgs::ControllerDebug debug_msg;
-  debug_msg.header.stamp = tnow;
-  debug_msg.lqr_u[0] = control_input(0);
-  debug_msg.lqr_u[1] = control_input(1);
-  debug_msg.lqr_u[2] = control_input(2);
-  debug_msg.lqr_u[3] = control_input(3);
-  debug_msg.thrust = T;
-  debug_msg.roll = roll;
-  debug_msg.pitch = pitch;
-  debug_msg.yaw = yaw;
-  debug_msg.state_valid = state_valid;
-  controller_debug_pub_.publish( debug_msg );
-  
   /* Actual commanded input */
   freyja_msgs::CtrlCommand ctrl_cmd;
   ctrl_cmd.roll = roll;
@@ -268,6 +258,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   ctrl_cmd.ctrl_mode = 0b00001111;
   atti_cmd_pub_.publish( ctrl_cmd );
   
+
   /* Tell bias estimator about new control input */
   if( bias_compensation_req_ )
     bias_est_.setControlInput( control_input );
@@ -275,6 +266,22 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   /* Update the total flying mass if requested */
   if( enable_dyn_mass_estimation_ )
     estimateMass( control_input, tnow );
+    
+  /* Debug information */
+  static freyja_msgs::ControllerDebug debug_msg;
+  debug_msg.header.stamp = tnow;
+  for( uint8_t idx=0; idx<4; idx++ )
+    debug_msg.lqr_u[idx] = static_cast<float>(control_input(idx));
+  for( uint8_t idx=0; idx<3; idx++ )
+    debug_msg.biasv[idx] = static_cast<float>(f_biases_(idx));
+  for( uint8_t idx=0; idx<7; idx++ )
+    debug_msg.errv[idx] = static_cast<float>(state_err(idx));
+
+  debug_msg.flags = (debug_msg.BIAS_EN * bias_compensation_req_) |
+                    (debug_msg.MASS_CR * enable_dyn_mass_correction_ ) |
+                    (debug_msg.FLAT_FF * enable_flatness_ff_ ) |
+                    (debug_msg.CTRL_OK * state_valid );
+  controller_debug_pub_.publish( debug_msg ); 
 }
 
 void LQRController::estimateMass( const Eigen::Matrix<double, 4, 1> &c, ros::Time &t )
