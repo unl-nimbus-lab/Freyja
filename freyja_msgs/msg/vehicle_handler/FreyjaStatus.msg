@@ -9,7 +9,7 @@
 # msg is to ease log analysis. External tools/code
 # are, of course, free to consume it however.
 
-Header  header
+std_msgs/Header  header
 int8    is_connected    # comms to vehicle
 int8    is_armed        # motors on
 int8    is_compctrl     # mode == computer

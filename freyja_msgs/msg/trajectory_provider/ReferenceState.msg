@@ -1,5 +1,5 @@
 # Reference 10-element state for the controller to follow.
-Header header
+std_msgs/Header header
 
 float64 pn
 float64 pe

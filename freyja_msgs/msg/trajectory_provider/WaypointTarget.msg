@@ -1,6 +1,6 @@
 # Discrete waypoint for a waypoint handler to convert into ReferenceState.
 
-Header header
+std_msgs/Header header
 float64 terminal_pn
 float64 terminal_pe
 float64 terminal_pd

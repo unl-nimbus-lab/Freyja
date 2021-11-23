@@ -8,7 +8,7 @@ uint8   BIAS_EN = 2
 uint8   FLAT_FF = 4
 uint8   MASS_CR = 8
 
-Header header
+std_msgs/Header header
 float32[4]  lqr_u
 float32[4]  biasv
 float32[7]  errv

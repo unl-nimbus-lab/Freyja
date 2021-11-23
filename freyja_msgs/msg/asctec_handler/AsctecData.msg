@@ -1,4 +1,4 @@
-Header header
+std_msgs/Header header
 
 int64 lat
 int64 lon
