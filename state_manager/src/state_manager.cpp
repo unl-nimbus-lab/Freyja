@@ -2,39 +2,40 @@
 #include "state_manager.h"
 #include "callback_implementations.cpp"
 
-#define ROS_NODE_NAME "state_manager"
+#define rclcpp_NODE_NAME "state_manager"
 
 
-StateManager::StateManager() : nh_(), priv_nh_("~")
+StateManager::StateManager() : Node( rclcpp_NODE_NAME )
 {
   state_vector_.resize( STATE_VECTOR_LEN );
   
   /* find out what the source of state information is:
       > "vicon" for a motion capture system with ENU frame
       > "asctec" for Ascending Tech autopilots (see corresponding handler)
-      > "apm" for ardupilot (uses mavros, see corresponding handler)
+      > "apm" for ardupilot (uses mavrclcpp, see corresponding handler)
       > "onboard_camera" for a downward-facing camera (pose+velocity)
   */ 
-  std::string default_state_source( "vicon" );
-  priv_nh_.param( "state_source", state_source_, default_state_source );
   
-  if( state_source_ == "vicon" )
-    initViconManager();
-  else if( state_source_ == "asctec" )
-    initAsctecManager();
-  else if (state_source_ == "apm" )
-    initPixhawkManager();
-  else if( state_source_ == "onboard_camera" )
-    initCameraManager();
+  declare_parameter<std::string>( "state_source", "mocap" );
+  declare_parameter<std::string>( "filter_type", "median" );
+  declare_parameter<int>( "filter_length", 21 );
+
+
+  get_parameter( "state_source", state_source_ );
+  
+  if( state_source_ == "mocap" )
+    initMocapManager();
+  // else if( state_source_ == "asctec" )
+  //   initAsctecManager();
+  // else if (state_source_ == "apm" )
+  //   initPixhawkManager();
+  // else if( state_source_ == "onboard_camera" )
+  //   initCameraManager();
 
 
   /* Announce state publisher */
-  state_pub_ = nh_.advertise <freyja_msgs::CurrentState>
-                  ( "current_state", 1, true ); 
+  state_pub_ = create_publisher <CurrentState> ( "current_state", 1 ); 
   
-  /* Instantiate filters. Useful for vicon. Autopilots have their own filters */                
-  priv_nh_.param( "filter_type", filter_type_, std::string("lwma") );
-  priv_nh_.param( "filter_length", filter_len_, int(21) );
 
   if( filter_type_ == "gauss" )
   {
@@ -49,7 +50,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
 
     pose_filter_ = FreyjaFilters( filter_len_, "gauss", "~", fc );
     rate_filter_ = FreyjaFilters( filter_len_, "gauss", "~", fc );
-    ROS_INFO( "Gaussian filter init!" );
+    RCLCPP_INFO( get_logger(), "Gaussian filter init!" );
   }
   else if( filter_type_ == "lwma" )
   {
@@ -57,7 +58,7 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
     //filter_len_ = 20;
     pose_filter_ = FreyjaFilters( filter_len_, "lwma", "cubic" );
     rate_filter_ = FreyjaFilters( filter_len_, "lwma", "cubic" );
-    ROS_INFO( "LWMA filter init!" );
+    RCLCPP_INFO( get_logger(), "LWMA filter init!" );
   }
   else if( filter_type_ == "median" )
   {
@@ -74,59 +75,58 @@ StateManager::StateManager() : nh_(), priv_nh_("~")
   prev_vn_.resize( filter_len_ );
   prev_ve_.resize( filter_len_ );
   prev_vd_.resize( filter_len_ );
-  lastUpdateTime_ = ros::Time::now();
+  lastUpdateTime_ = now();
   have_location_fix_ = false;
 }
 
-void StateManager::initViconManager()
+void StateManager::initMocapManager()
 {
-  std::string vicon_topic( "/vicon/FENRIR/FENRIR" );
-  priv_nh_.param( "vicon_topic", vicon_topic, vicon_topic );
+  declare_parameter<std::string>( "mocap_topic",  "/vicon/FENRIR/FENRIR" );
+  std::string mocap_topic;
 
-  /* Associate vicon callback */
-  vicon_data_sub_ = nh_.subscribe( vicon_topic, 1,
-                                    &StateManager::viconCallback, this,
-                                    ros::TransportHints().tcpNoDelay() );
+  get_parameter( "mocap_topic", mocap_topic );
+  /* Associate mocap callback */
+  mocap_data_sub_ = create_subscription<TFStamped> ( mocap_topic, 1,
+                                    std::bind( &StateManager::mocapCallback, this, _1 ) );
 }
 
-void StateManager::initAsctecManager()
-{
-  std::string vehicle_topic( "/asctec_onboard_data" );
-  nh_.param( "vehicle_topic", vehicle_topic, vehicle_topic );
-  /*Associate a vehicle data callback */
-  asctec_data_sub_ = nh_.subscribe( vehicle_topic, 1,
-                                &StateManager::asctecDataCallback, this );
-}
+// void StateManager::initAsctecManager()
+// {
+//   declare_parameter<std::string>( "vehicle_topic", "/asctec_onboard_data" );
+//   std::string vehicle_topic;
+//   get_parameter( "vehicle_topic", vehicle_topic );
+//   /*Associate a vehicle data callback */
+//   asctec_data_sub_ = create_subscription<freyja_msgs::msg::AsctecData>( vehicle_topic, 1,
+//                                 std::bind(&StateManager::asctecDataCallback, this, _1) );
+// }
 
-void StateManager::initPixhawkManager()
-{
-  have_arming_origin_ = false;
-  mavros_gpsraw_sub_ = nh_.subscribe( "/mavros/global_position/global", 1,
-                                &StateManager::mavrosGpsRawCallback, this );
-  mavros_gpsodom_sub_ = nh_.subscribe( "/mavros/global_position/local", 1,
-                                &StateManager::mavrosGpsOdomCallback, this,
-                                ros::TransportHints().tcpNoDelay() );
-  mavros_rtk_sub_ = nh_.subscribe( "/ublox_f9p_rtkbaseline", 1,
-                                &StateManager::mavrosRtkBaselineCallback, this );
-  compass_sub_ = nh_.subscribe( "/mavros/global_position/compass_hdg", 1, 
-				                &StateManager::mavrosCompassCallback, this );
+// void StateManager::initPixhawkManager()
+// {
+//   have_arming_origin_ = false;
+//   mavrclcpp_gpsraw_sub_ = create_subscription( "/mavrclcpp/global_position/global", 1,
+//                                 std::bind(&StateManager::mavrclcppGpsRawCallback, this, _1 );
+//   mavrclcpp_gpsodom_sub_ = create_subscription( "/mavrclcpp/global_position/local", 1,
+//                                 std::bind(&StateManager::mavrclcppGpsOdomCallback, this, _1 );
+//   mavrclcpp_rtk_sub_ = create_subscription( "/ublox_f9p_rtkbaseline", 1,
+//                                 std::bind(&StateManager::mavrclcppRtkBaselineCallback, this, _1 );
+//   compass_sub_ = create_subscription( "/mavrclcpp/global_position/compass_hdg", 1, 
+// 				                std::bind(&StateManager::mavrclcppCompassCallback, this, _1 );
 				                
-  maplock_srv_ = nh_.advertiseService( "/lock_arming_mapframe", 
-                        &StateManager::maplockArmingHandler, this );
-}
+//   maplock_srv_ = nh_.advertiseService( "/lock_arming_mapframe", 
+//                         std::bind(&StateManager::maplockArmingHandler, this );
+// }
 
-void StateManager::initCameraManager()
-{
-  camera_estimate_sub_ = nh_.subscribe( "/onboard_camera/position_velocity", 1,
-                                &StateManager::cameraUpdatesCallback, this );
-}
+// void StateManager::initCameraManager()
+// {
+//   camera_estimate_sub_ = create_subscription( "/onboard_camera/position_velocity", 1,
+//                                 std::bind(&StateManager::cameraUpdatesCallback, this, _1 );
+// }
 
 
 int main( int argc, char **argv )
 {
-  ros::init( argc, argv, ROS_NODE_NAME );
-  StateManager sm;
-  ros::spin();
-  
+  rclcpp::init( argc, argv );
+  rclcpp::spin( std::make_shared<StateManager>() );
+  rclcpp::shutdown();
   return 0;
 }

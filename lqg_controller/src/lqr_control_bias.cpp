@@ -13,43 +13,53 @@
 #define ROS_NODE_NAME "lqg_control"
 #define pi 3.1416
 
-LQRController::LQRController(BiasEstimator &b) : nh_(),
-                                                 priv_nh_("~"),
+LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
                                                  bias_est_( b )
 {
   int controller_rate_default = 30;
-  priv_nh_.param( "controller_rate", controller_rate_, controller_rate_default );
-  
   float mass_default = 0.85;
-  priv_nh_.param( "total_mass", total_mass_, mass_default );
   
-  bool strict_gains = false;
-  priv_nh_.param( "use_stricter_gains", use_stricter_gains_, strict_gains );
+  declare_parameter<int>( "controller_rate", controller_rate_default );
+  declare_parameter<float>( "total_mass", mass_default );
+  declare_parameter<bool>( "use_stricter_gains", false );
+  declare_parameter<bool>( "enable_flatness_ff", false );
+  declare_parameter<bool>( "mass_correction", false );
+  declare_parameter<bool>( "mass_estimation", true );
+  declare_parameter<std::string>( "bias_compensation", "auto" );
   
-  /* initialise system params, matrices and controller configuration */
+  get_parameter( "controller_rate", controller_rate_ );
+  get_parameter( "total_mass", total_mass_ );
+  get_parameter( "use_stricter_gains", use_stricter_gains_ );
+  
+  
+  /* initialise system, matrices and controller configuration */
   initLqrSystem();
   
+  
   /* Associate a subscriber for the current vehicle state */
-  state_sub_ = nh_.subscribe( "/current_state", 1,
-                              &LQRController::stateCallback, this );
+  state_sub_ = create_subscription<CurrentState>( "/current_state", 1,
+                  std::bind(&LQRController::stateCallback, this, _1) );
   /* Associate a subscriber for the current reference state */
-  reference_sub_ = nh_.subscribe( "/reference_state", 1, 
-                              &LQRController::trajectoryReferenceCallback, this );
+  reference_sub_ = create_subscription<TrajRef>( "/reference_state", 1,
+    std::bind(&LQRController::trajectoryReferenceCallback, this, _1) );
   
   /* Service provider for bias compensation */
-  bias_enable_serv_ = nh_.advertiseService( "/set_bias_compensation",
-                              &LQRController::biasEnableServer, this );
-  /* Announce publisher for controller output */
-  atti_cmd_pub_ = nh_.advertise <freyja_msgs::CtrlCommand>
-                    ( "/rpyt_command", 1, true );
-  controller_debug_pub_ = nh_.advertise <freyja_msgs::ControllerDebug>
-                    ( "/controller_debug", 1, true );
-  est_mass_pub_ = nh_.advertise<std_msgs::Float32>( "/freyja_estimated_mass", 1, true );
+  bias_enable_serv_ = create_service <BoolServ> ( "/set_bias_compensation",
+                  std::bind(&LQRController::biasEnableServer, this, _1, _2 ) );
+  
+  
+  /* Announce publishers for controller output */
+  atti_cmd_pub_ = create_publisher <RPYT_Command>
+                    ( "/rpyt_command", 1 );
+  controller_debug_pub_ = create_publisher <CTRL_Debug>
+                    ( "/controller_debug", 1 );
+  est_mass_pub_ = create_publisher <std_msgs::msg::Float32>
+                    ( "/freyja_estimated_mass", 1 );
 
   /* Timer to run the LQR controller perdiodically */
   float controller_period = 1.0/controller_rate_;
-  controller_timer_ = nh_.createTimer( ros::Duration(controller_period),
-                                      &LQRController::computeFeedback, this );
+  controller_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(controller_period),
+                           std::bind( &LQRController::computeFeedback, this ) );
   
   /* Checks for correctness */
   STATEFB_MISSING_INTRV_ = 0.5;
@@ -58,7 +68,7 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   
   /* Bias compensation parameters */
   std::string _bcomp = "auto";
-  priv_nh_.param( "bias_compensation", _bcomp, _bcomp );
+  get_parameter( "bias_compensation", _bcomp );
   if( _bcomp == "on" )
     bias_compensation_req_ = true;                // always on (be careful!!)
   else if( _bcomp == "auto" || _bcomp == "off" )
@@ -69,18 +79,18 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   f_biases_ << 0.0, 0.0, 0.0;
   
   /* Differential flatness feed-forward accelerations */
-  priv_nh_.param( "enable_flatness_ff", enable_flatness_ff_, bool(false) );
+  get_parameter( "enable_flatness_ff", enable_flatness_ff_ );
   reference_ff_ << 0.0, 0.0, 0.0, 0.0;
   
   
   /* Mass estimation */
   enable_dyn_mass_correction_ = false;
-  priv_nh_.param( "mass_correction", enable_dyn_mass_correction_, bool(false) );
-  priv_nh_.param( "mass_estimation", enable_dyn_mass_estimation_, bool(true) );
+  get_parameter( "mass_correction", enable_dyn_mass_correction_ );
+  get_parameter( "mass_estimation", enable_dyn_mass_estimation_ );
   if( enable_dyn_mass_correction_ )
   {
     enable_dyn_mass_estimation_ = true;
-    ROS_WARN( "LQR: Mass correction active at init! This is discouraged." );
+    RCLCPP_WARN( get_logger(), "LQR: Mass correction active at init! This is discouraged." );
   }
 }
 
@@ -112,30 +122,31 @@ void LQRController::initLqrSystem()
               0.0, 1.225, 0.0, 0.00, 1.5731, 0.0, 0.0,
               0.0, 0.0, 3.2016, 0.0, 0.0, 2.550, 0.0,
               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-    ROS_WARN( "LQR: stricter gains requested!" );
+    RCLCPP_WARN( get_logger(), "LQR: stricter gains requested!" );
   }
 }
 
-bool LQRController::biasEnableServer( BoolServReq& rq, BoolServRsp& rp )
+void LQRController::biasEnableServer( const BoolServ::Request::SharedPtr rq,
+                                      const BoolServ::Response::SharedPtr rp )
 {
   if( bias_compensation_off_ )
   {
-    ROS_WARN( "LQR: Bias compensation remains off throughout." );
-    return false;       // service unsuccessful
+    RCLCPP_WARN( get_logger(), "LQR: Bias compensation remains off throughout." );
+    rp -> success = false;       // service unsuccessful
   }
   
-  bias_compensation_req_ = rq.data;
+  bias_compensation_req_ = rq -> data;
   if( bias_compensation_req_ )
   {
-    ROS_WARN( "LQR: Bias compensation active!" );
+    RCLCPP_WARN( get_logger(), "LQR: Bias compensation active!" );
     bias_est_.enable();
   }
   else
   {
-    ROS_WARN( "LQR: Bias compensation inactive!" );
+    RCLCPP_WARN( get_logger(), "LQR: Bias compensation inactive!" );
     bias_est_.disable();
   }
-  return true;  // service successful
+  rp -> success = true;  // service successful
 }
 
 constexpr double LQRController::calcYawError( const double &a, const double &b )
@@ -145,7 +156,7 @@ constexpr double LQRController::calcYawError( const double &a, const double &b )
   return yd-pi; 
 }
 
-void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &msg )
+void LQRController::stateCallback( const CurrentState::ConstSharedPtr msg )
 {
   /* Parse message to obtain state and reduced state information */
   static Eigen::Matrix<double, 7, 1> current_state;
@@ -177,10 +188,10 @@ void LQRController::stateCallback( const freyja_msgs::CurrentState::ConstPtr &ms
     have_state_update_ = true;
   }
   
-  last_state_update_t_ = ros::Time::now();
+  last_state_update_t_ = now();
 }
 
-void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
+void LQRController::trajectoryReferenceCallback( const TrajRef::ConstSharedPtr msg )
 {
   /* Simply copy over the reference state. Note that this might happen quite
     frequently (I expect a well-written trajectory provider to be using a nearly
@@ -197,7 +208,7 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
 }
 
 __attribute__((optimize("unroll-loops")))
-void LQRController::computeFeedback( const ros::TimerEvent &event )
+void LQRController::computeFeedback( )
 {
   /* Wait for atleast one update, or architect the code better */
   if( !have_state_update_ )
@@ -209,10 +220,10 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   static Eigen::Matrix<double, 7, 1> state_err;
   
   bool state_valid = true;
-  auto tnow = ros::Time::now();
+  auto tnow = now();
   
   /* Check the difference from last state update time */
-  float state_age = (tnow - last_state_update_t_).toSec();
+  float state_age = (tnow - last_state_update_t_).seconds();
   if( state_age > STATEFB_MISSING_INTRV_ )
   {
     /* State feedback missing for more than specified interval. Try descend */
@@ -250,13 +261,13 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   }
   
   /* Actual commanded input */
-  freyja_msgs::CtrlCommand ctrl_cmd;
+  RPYT_Command ctrl_cmd;
   ctrl_cmd.roll = roll;
   ctrl_cmd.pitch = pitch;
   ctrl_cmd.yaw = yaw;
   ctrl_cmd.thrust = T;
   ctrl_cmd.ctrl_mode = 0b00001111;
-  atti_cmd_pub_.publish( ctrl_cmd );
+  atti_cmd_pub_ -> publish( ctrl_cmd );
   
 
   /* Tell bias estimator about new control input */
@@ -268,7 +279,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
     estimateMass( control_input, tnow );
     
   /* Debug information */
-  static freyja_msgs::ControllerDebug debug_msg;
+  static CTRL_Debug debug_msg;
   debug_msg.header.stamp = tnow;
   for( uint8_t idx=0; idx<4; idx++ )
     debug_msg.lqr_u[idx] = static_cast<float>(control_input(idx));
@@ -281,10 +292,10 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
                     (debug_msg.MASS_CR * enable_dyn_mass_correction_ ) |
                     (debug_msg.FLAT_FF * enable_flatness_ff_ ) |
                     (debug_msg.CTRL_OK * state_valid );
-  controller_debug_pub_.publish( debug_msg ); 
+  controller_debug_pub_ -> publish( debug_msg ); 
 }
 
-void LQRController::estimateMass( const Eigen::Matrix<double, 4, 1> &c, ros::Time &t )
+void LQRController::estimateMass( const Vector4d &c, rclcpp::Time &t )
 {
   /* Experimental module that estimates the true mass of the system in air.
     It uses the provided mass and observes the deviation from expected output
@@ -294,10 +305,10 @@ void LQRController::estimateMass( const Eigen::Matrix<double, 4, 1> &c, ros::Tim
     usually better addressed elsewhere in the architecture (or get a better scale).
   */
   static float prev_estimated_mass = total_mass_;
-  static std_msgs::Float32 estmass;
-  static ros::Time t_last = ros::Time::now();
+  static std_msgs::msg::Float32 estmass;
+  static rclcpp::Time t_last = now();
 
-  if( (t-t_last).toSec() < 3.0 )
+  if( (t-t_last).seconds() < 3.0 )
     return;
 
   float ctrl_effort = c(2) + 9.81;
@@ -306,7 +317,7 @@ void LQRController::estimateMass( const Eigen::Matrix<double, 4, 1> &c, ros::Tim
   estimated_mass = (prev_estimated_mass + estimated_mass)/2.0;
   
   estmass.data = estimated_mass;
-  est_mass_pub_.publish( estmass );
+  est_mass_pub_ -> publish( estmass );
   
   /* if correction is allowed- clip between min and max */
   if( enable_dyn_mass_correction_ )
@@ -319,12 +330,16 @@ void LQRController::estimateMass( const Eigen::Matrix<double, 4, 1> &c, ros::Tim
 
 int main( int argc, char** argv )
 {
-  ros::init( argc, argv, ROS_NODE_NAME );
+  /*ros::init( argc, argv, ROS_NODE_NAME );
   BiasEstimator estimator;
   LQRController lqr( estimator );
   
   ros::MultiThreadedSpinner cbspinner(4);
   cbspinner.spin();
-  
+  */
+  rclcpp::init( argc, argv );
+  BiasEstimator estimator;
+  rclcpp::spin( std::make_shared<LQRController>(estimator) );
+  rclcpp::shutdown();
   return 0;
 }

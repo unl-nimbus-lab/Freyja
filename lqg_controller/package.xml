@@ -1,22 +1,24 @@
 <?xml version="1.0"?>
-<package>
+<package format="3">
   <name>lqg_control</name>
-  <version>0.1.0</version>
+  <version>2.0.0</version>
   <description>The lqg_control package</description>
 
   <maintainer email="ashankar@cse.unl.edu">aj</maintainer>
   <license>GPLv3</license>
 
-  <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>message_generation</build_depend>
-  <build_depend>roscpp</build_depend>
-  <build_depend>freyja_msgs</build_depend>
-  <build_depend>cmake_modules</build_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>freyja_msgs</depend>
+  
   <build_depend>Eigen3</build_depend>
   
-  <run_depend>roscpp</run_depend>
-  <run_depend>message_runtime</run_depend>
-  <run_depend>message_generation</run_depend>
-  <run_depend>Eigen3</run_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
 
 </package>

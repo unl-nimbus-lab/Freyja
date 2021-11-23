@@ -11,7 +11,6 @@ properties (coeffs, type, len. etc) are held here.
 #ifndef FREYJA_FILTER_COLLECTION_H
 #define FREYJA_FILTER_COLLECTION_H
 
-#include <ros/ros.h>
 #include <vector>
 #include <algorithm>
 #include <numeric>
@@ -99,7 +98,7 @@ class FreyjaFilters
      */
      filter_len_ = MEDIAN_FILTER_LEN;
      unsorted_temp.resize( MEDIAN_FILTER_LEN );
-     ROS_WARN( "Median filter init! Length: %d", filter_len_ );
+     std::cout << "Median filter init! Length: " << filter_len_ ;
   }
 
   public:
@@ -145,7 +144,7 @@ FreyjaFilters::FreyjaFilters( const int& len, const std::string &f_name,
     if( coeffs.size() == 1 )
     {
       /* Init default filter: mean 10, stddev = 5 */
-      ROS_WARN( "[FILTER]: No coeffs given for Gaussian. Picking defaults: len=21, stddev=5." );
+      std::cout << "[FILTER]: No coeffs given for Gaussian. Picking defaults: len=21, stddev=5." ;
       int len = 21;
       std::vector<double> fc = { 0.0108, 0.0158, 0.0222, 0.0299, 0.0388, 0.0484, 
                                 0.0579, 0.0666, 0.0737, 0.0782, 0.0798, 0.0782,
@@ -163,7 +162,7 @@ FreyjaFilters::FreyjaFilters( const int& len, const std::string &f_name,
   if( f_name == "woltring" )
   {
     /* @TODO: implement this .. */
-    ROS_ERROR( "Woltring filter not implemented in this function call! Picking median-filter." );
+    std::cout << "Woltring filter not implemented in this function call! Picking median-filter.";
     FreyjaFilters( -1, "median", "~" );
 
     using_conv_filters_ = false;
@@ -178,7 +177,7 @@ FreyjaFilters::FreyjaFilters( const int& len, const std::string &f_name,
   }
 
   if( !filter_initialised )
-    ROS_ERROR( "Filter not initialized: %s", f_name.c_str() );
+    std::cout << "Filter [" << f_name << "] not initialized!\n" ;
 }
 
 void FreyjaFilters::filterObservations( const std::vector<double> &obs,
@@ -191,7 +190,7 @@ void FreyjaFilters::filterObservations( const std::vector<double> &obs,
                                     obs.begin(), 0.0 )/weight_scaler_;
     else
     {
-      ROS_WARN( "Filter length does not match!" );
+      std::cout << "Filter length does not match!\n" ;
       retVal = obs.back();
     }
   }
@@ -219,7 +218,7 @@ void FreyjaFilters::filterObservations( const std::vector<double> &obs1,
                                     obs1.begin(), 0.0 )/weight_scaler_;
     else
     {
-      ROS_WARN( "Filter length does not match!" );
+      std::cout << "Filter length does not match!\n" ;
       retVal1 = obs1.back();
     }
     
@@ -229,7 +228,7 @@ void FreyjaFilters::filterObservations( const std::vector<double> &obs1,
                                     obs2.begin(), 0.0 )/weight_scaler_;
     else
     {
-      ROS_WARN( "Filter length does not match!" );
+      std::cout << "Filter length does not match!\n" ;
       retVal2 = obs2.back();
     }
     
@@ -239,7 +238,7 @@ void FreyjaFilters::filterObservations( const std::vector<double> &obs1,
                                     obs3.begin(), 0.0 )/weight_scaler_;
     else
     {
-      ROS_WARN( "Filter length does not match!" );
+      std::cout << "Filter length does not match!\n" ;
       retVal3 = obs3.back();
     }
   }

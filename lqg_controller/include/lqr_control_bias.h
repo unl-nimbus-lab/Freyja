@@ -13,30 +13,38 @@
    -- aj / 17th Nov, 2017.
 */
 #include <mutex>
+#include <memory>
+#include <chrono>
 
-#include <ros/ros.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <std_srvs/SetBool.h>
-#include <std_msgs/Float32.h>
+#include "rclcpp/rclcpp.hpp"
+//#include "geometry_msgs/msg/TransformStamped.hpp"
+#include "std_srvs/srv/set_bool.hpp"
+#include "std_msgs/msg/float32.hpp"
 
-#include <freyja_msgs/CurrentState.h>
-#include <freyja_msgs/CtrlCommand.h>
-#include <freyja_msgs/ControllerDebug.h>
-#include <freyja_msgs/ReferenceState.h>
+#include "freyja_msgs/msg/current_state.hpp"
+#include "freyja_msgs/msg/ctrl_command.hpp"
+#include <freyja_msgs/msg/controller_debug.hpp>
+#include <freyja_msgs/msg/reference_state.hpp>
 
 #include <eigen3/Eigen/Dense>
 
 #include "bias_estimator.h"
 
-typedef freyja_msgs::ReferenceState TrajRef;
-typedef std_srvs::SetBool::Request BoolServReq;
-typedef std_srvs::SetBool::Response BoolServRsp;
-typedef Eigen::Matrix<double, 6, 1> PosVelNED;
+typedef freyja_msgs::msg::ReferenceState TrajRef;
+typedef freyja_msgs::msg::CurrentState CurrentState;
+typedef std_srvs::srv::SetBool BoolServ;
+typedef freyja_msgs::msg::CtrlCommand RPYT_Command;
+typedef freyja_msgs::msg::ControllerDebug CTRL_Debug;
 
-class LQRController
+typedef Eigen::Matrix<double, 6, 1> PosVelNED;
+typedef Eigen::Matrix<double, 4, 1> Vector4d;
+
+using std::placeholders::_1;
+using std::placeholders::_2;
+
+class LQRController : public rclcpp::Node
 {
-  ros::NodeHandle nh_, priv_nh_;
-  freyja_msgs::CurrentState state_vector_;
+  CurrentState state_vector_;
   Eigen::Matrix<double, 7, 1> reduced_state_;
   
   /* Reference state vector */
@@ -61,7 +69,7 @@ class LQRController
   Eigen::Matrix<double, 3, 3> rot_yaw_;
   
   float STATEFB_MISSING_INTRV_;
-  ros::Time last_state_update_t_;
+  rclcpp::Time last_state_update_t_;
   bool have_state_update_;
   bool have_reference_update_;
   
@@ -82,25 +90,26 @@ class LQRController
     LQRController( BiasEstimator & );
     void initLqrSystem();
     
-    ros::Subscriber state_sub_;
-    void stateCallback( const freyja_msgs::CurrentState::ConstPtr & ) __attribute__((hot));
+    rclcpp::Subscription<CurrentState>::SharedPtr state_sub_;
+    void stateCallback( const CurrentState::ConstSharedPtr ) __attribute__((hot));
     
-    ros::ServiceServer bias_enable_serv_;
-    bool biasEnableServer( BoolServReq&, BoolServRsp& );
+    rclcpp::Service<BoolServ>::SharedPtr bias_enable_serv_;
+    void biasEnableServer( const BoolServ::Request::SharedPtr,
+                           const BoolServ::Response::SharedPtr );
     
-    ros::Publisher atti_cmd_pub_;
-    ros::Publisher controller_debug_pub_;
+    rclcpp::Publisher<RPYT_Command>::SharedPtr atti_cmd_pub_;
+    rclcpp::Publisher<CTRL_Debug>::SharedPtr controller_debug_pub_;
     
-    ros::Timer controller_timer_;
-    void computeFeedback( const ros::TimerEvent & ) __attribute__((optimize("unroll-loops")));
+    rclcpp::TimerBase::SharedPtr controller_timer_;
+    void computeFeedback( ) __attribute__((optimize("unroll-loops")));
     
-    ros::Subscriber reference_sub_;
-    void trajectoryReferenceCallback( const TrajRef::ConstPtr & );
+    rclcpp::Subscription<TrajRef>::SharedPtr reference_sub_;
+    void trajectoryReferenceCallback( const TrajRef::ConstSharedPtr );
 
     /* helper function to calculate yaw error */
     static constexpr inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
     
     /* estimate actual mass in flight */
-    void estimateMass( const Eigen::Matrix<double, 4, 1> &, ros::Time & );
-    ros::Publisher est_mass_pub_;
+    void estimateMass( const Eigen::Matrix<double, 4, 1> &, rclcpp::Time & );
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr est_mass_pub_;
 };

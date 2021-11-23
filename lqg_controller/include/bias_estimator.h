@@ -12,25 +12,28 @@
 #include <mutex>
 #include <thread>
 #include <chrono>
+#include <memory>
 
-#include <ros/ros.h>
+#include "rclcpp/rclcpp.hpp"
 #include <eigen3/Eigen/Dense>
 
-#include <freyja_msgs/CurrentStateBiasEst.h>
+#include "freyja_msgs/msg/current_state_bias_est.hpp"
 
 typedef std::chrono::microseconds uSeconds;
 typedef std::chrono::high_resolution_clock ClockTime;
 typedef std::chrono::time_point<ClockTime> ClockTimePoint;
 
+typedef freyja_msgs::msg::CurrentStateBiasEst EstimatedState;
+
 const int nStates = 9;
 const int nCtrl = 3;
 const int nMeas = 6;
 
-class BiasEstimator
+class BiasEstimator : public rclcpp::Node
 {
   friend class LQRController;
   
-  ros::NodeHandle nh_, priv_nh_;
+  //ros::NodeHandle nh_, priv_nh_;
   Eigen::Matrix<double, nStates, nStates> sys_A_, sys_A_t_;
   Eigen::Matrix<double, nStates, nCtrl> sys_B_;
   
@@ -75,12 +78,12 @@ class BiasEstimator
   std::chrono::duration<double> tc_interval_;
 
   /* final ros data published */
-  freyja_msgs::CurrentStateBiasEst state_msg_;
+  EstimatedState state_msg_;
   public:
     BiasEstimator();
     ~BiasEstimator();
     
-    ros::Publisher bias_pub_;
+    rclcpp::Publisher<EstimatedState>::SharedPtr bias_pub_;
     
     /* State propagation - runs at a fixed rate */
     __attribute__((optimize("unroll-loops")))

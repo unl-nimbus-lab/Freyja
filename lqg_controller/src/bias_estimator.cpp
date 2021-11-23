@@ -15,18 +15,18 @@
 #define ZERO3x3 Eigen::MatrixXd::Zero(3,3)
 #define IDEN3x3 Eigen::MatrixXd::Identity(3,3)
 
-BiasEstimator::BiasEstimator() : nh_(), priv_nh_("~")
+BiasEstimator::BiasEstimator() : Node( ROS_NODE_NAME )
 {
+  
+  declare_parameter( "estimator_rate", int(10) );
+  
+  
   /* Used for debug and such */
-  std::string output_topic;
-  priv_nh_.param( "estimator_debug_topic", output_topic,
-                  std::string("/bias_estimates") );
-  bias_pub_ = nh_.advertise <freyja_msgs::CurrentStateBiasEst>
-                              ( output_topic, 1, true );
+  bias_pub_ = create_publisher <EstimatedState>
+                              ( "/bias_estimates", 1 );
 
   /* Parameters for thread */
-  int estimator_rate_default = 10;
-  priv_nh_.param( "estimator_rate", estimator_rate_, estimator_rate_default );
+  get_parameter( "estimator_rate", estimator_rate_ );
   estimator_period_us_ = std::round( (1.0/estimator_rate_)*1000*1000 );
   
   /* Time constant  factor */
@@ -110,7 +110,7 @@ void BiasEstimator::state_propagation( )
   input_shaping << 0.95, 0.95, 0.95;
   Eigen::Matrix<double, 3, 1> BIAS_LIM_ABS;   // clip limits (acceleration)
   BIAS_LIM_ABS << 2.0, 2.0, 3.0;
-  while( ros::ok() )
+  while( rclcpp::ok() )
   {
     /* Mark start(ts) and end(te) times for precise timing */
     ts = std::chrono::high_resolution_clock::now();
@@ -154,7 +154,7 @@ void BiasEstimator::state_propagation( )
       spmtx.unlock();
 
       // publish
-      state_msg_.header.stamp = ros::Time::now();
+      state_msg_.header.stamp = now();
 
       last_prop_t_ = te = std::chrono::high_resolution_clock::now();
       int dt = std::chrono::duration_cast<uSeconds>(te-ts).count();
@@ -164,7 +164,7 @@ void BiasEstimator::state_propagation( )
       state_msg_.state_vector[10] = delta_t;
       //state_msg_.state_vector[10] = state_cov_P_.diagonal().norm();
       state_msg_.state_vector[11] = ctrl_input_u_.norm();
-      bias_pub_.publish( state_msg_ );
+      bias_pub_ -> publish( state_msg_ );
 
       std::this_thread::sleep_for( uSeconds(estimator_period_us_ - dt) );
     }
