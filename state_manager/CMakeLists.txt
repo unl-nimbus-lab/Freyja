@@ -37,6 +37,8 @@ ament_target_dependencies( state_manager_node
   std_srvs
   nav_msgs
   tf2
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 install(TARGETS

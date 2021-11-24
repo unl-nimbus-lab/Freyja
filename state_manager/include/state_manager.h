@@ -21,6 +21,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/impl/utils.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/buffer.h>
 
 #include "freyja_msgs/msg/current_state.hpp"
 #include "freyja_msgs/msg/asctec_data.hpp"
@@ -77,6 +78,11 @@ class StateManager: public rclcpp::Node
   std::string filter_type_;
   FreyjaFilters pose_filter_;
   FreyjaFilters rate_filter_;
+
+  /* tf related */
+  std::string tf_base_frame_;
+  std::string tf_my_frame_;
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   
   /* containers for handling gps data */
   double home_lat_, home_lon_;
@@ -93,6 +99,7 @@ class StateManager: public rclcpp::Node
     StateManager();
     /* launch-time parameter specifies which one to pick */
     void initPixhawkManager();
+    void initTfManager();
     void initAsctecManager();
     void initMocapManager();
     void initCameraManager();
@@ -100,6 +107,9 @@ class StateManager: public rclcpp::Node
     /* Callback handler for Vicon */
     rclcpp::Subscription<TFStamped>::SharedPtr mocap_data_sub_;
     void mocapCallback( const TFStamped::ConstSharedPtr ) __attribute__((hot));
+
+    rclcpp::TimerBase::SharedPtr tf_timer_;
+    void timerTfCallback();
 
     // /* Callback handler for asctec_onboard_data */
     // rclcpp::Subscription asctec_data_sub_;

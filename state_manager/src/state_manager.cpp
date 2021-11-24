@@ -25,6 +25,8 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
   
   if( state_source_ == "mocap" )
     initMocapManager();
+  else if( state_source_ == "tf_mocap" )
+    initTfManager();
   // else if( state_source_ == "asctec" )
   //   initAsctecManager();
   // else if (state_source_ == "apm" )
@@ -88,6 +90,24 @@ void StateManager::initMocapManager()
   /* Associate mocap callback */
   mocap_data_sub_ = create_subscription<TFStamped> ( mocap_topic, 1,
                                     std::bind( &StateManager::mocapCallback, this, _1 ) );
+}
+
+void StateManager::initTfManager()
+{
+  declare_parameter<int>( "tf_rate", 200 );
+  declare_parameter<std::string>( "state_base_frame", "map" );
+  declare_parameter<std::string>( "state_my_frame", "agent_1" );
+  
+  int tf_lookup_rate;
+  float tf_timer_freq;
+  
+  get_parameter( "tf_rate", tf_lookup_rate );
+  get_parameter( "state_base_frame", tf_base_frame_ );
+  get_parameter( "state_my_frame", tf_my_frame_ );
+
+  tf_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(1.0/tf_lookup_rate),
+                          std::bind(&StateManager::timerTfCallback, this) );
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>( get_clock() );
 }
 
 // void StateManager::initAsctecManager()

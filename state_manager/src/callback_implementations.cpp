@@ -83,6 +83,15 @@ void StateManager::mocapCallback( const TFStamped::ConstSharedPtr msg )
   state_pub_ -> publish( state_msg );
 }
 
+void StateManager::timerTfCallback()
+{
+  /* This is a timer callback */
+  static TFStamped tform;
+  
+  tform = tf_buffer_ -> lookupTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero );
+
+}
+
 // void StateManager::asctecDataCallback( const freyja_msgs::AsctecData::ConstPtr &msg )
 // {
 //   double time_since = (ros::Time::now() - lastUpdateTime_).toSec();
