@@ -22,6 +22,8 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
 
 
   get_parameter( "state_source", state_source_ );
+  get_parameter( "filter_type", filter_type_ );
+  get_parameter( "filter_length", filter_len_ );
   
   if( state_source_ == "mocap" )
     initMocapManager();
@@ -68,6 +70,8 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
     rate_filter_ = FreyjaFilters( -1, "median", "~" );
     filter_len_ = pose_filter_.getCurrentFilterLen();
   }
+  else
+    RCLCPP_WARN( get_logger(), "No filter initialised by Freyja." );
   
   // init history containers
   prev_pn_.resize( filter_len_ );
@@ -105,9 +109,12 @@ void StateManager::initTfManager()
   get_parameter( "state_base_frame", tf_base_frame_ );
   get_parameter( "state_my_frame", tf_my_frame_ );
 
+  RCLCPP_INFO( get_logger(), "Registered tf frames: [%s] to [%s]", tf_base_frame_.c_str(), tf_my_frame_.c_str() );
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>( get_clock() );
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>( *tf_buffer_ );
   tf_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(1.0/tf_lookup_rate),
                           std::bind(&StateManager::timerTfCallback, this) );
-  tf_buffer_ = std::make_unique<tf2_ros::Buffer>( get_clock() );
+
 }
 
 // void StateManager::initAsctecManager()

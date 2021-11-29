@@ -88,7 +88,11 @@ void StateManager::timerTfCallback()
   /* This is a timer callback */
   static TFStamped tform;
   
-  tform = tf_buffer_ -> lookupTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero );
+  if( tf_buffer_ -> canTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero ) )
+  {
+    tform = tf_buffer_ -> lookupTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero );
+    mocapCallback( std::make_shared<const TFStamped>( tform ) );
+  }
 
 }
 
