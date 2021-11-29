@@ -23,7 +23,7 @@ BiasEstimator::BiasEstimator() : Node( ROS_NODE_NAME )
   
   /* Used for debug and such */
   bias_pub_ = create_publisher <EstimatedState>
-                              ( "/bias_estimates", 1 );
+                              ( "bias_estimates", 1 );
 
   /* Parameters for thread */
   get_parameter( "estimator_rate", estimator_rate_ );

@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>robomaster_handler</name>
+  <version>2.0.0</version>
+  <description>Freyja's robomaster translation package</description>
+  <maintainer email="ashankar@cse.unl.edu">aj</maintainer>
+  <license>GPLv3</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>freyja_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>robomaster_interfaces</depend>
+
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

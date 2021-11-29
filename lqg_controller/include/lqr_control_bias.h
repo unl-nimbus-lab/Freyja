@@ -22,7 +22,7 @@
 #include "std_msgs/msg/float32.hpp"
 
 #include "freyja_msgs/msg/current_state.hpp"
-#include "freyja_msgs/msg/ctrl_command.hpp"
+#include "freyja_msgs/msg/wheel_command.hpp"
 #include <freyja_msgs/msg/controller_debug.hpp>
 #include <freyja_msgs/msg/reference_state.hpp>
 
@@ -33,7 +33,7 @@
 typedef freyja_msgs::msg::ReferenceState TrajRef;
 typedef freyja_msgs::msg::CurrentState CurrentState;
 typedef std_srvs::srv::SetBool BoolServ;
-typedef freyja_msgs::msg::CtrlCommand RPYT_Command;
+typedef freyja_msgs::msg::WheelCommand Wheel_Command;
 typedef freyja_msgs::msg::ControllerDebug CTRL_Debug;
 
 typedef Eigen::Matrix<double, 6, 1> PosVelNED;
@@ -45,11 +45,11 @@ using std::placeholders::_2;
 class LQRController : public rclcpp::Node
 {
   CurrentState state_vector_;
-  Eigen::Matrix<double, 7, 1> reduced_state_;
+  Eigen::Matrix<double, 6, 1> reduced_state_;
   
   /* Reference state vector */
-  Eigen::Matrix<double, 7, 1> reference_state_;
-  Eigen::Matrix<double, 4, 1> reference_ff_;
+  Eigen::Matrix<double, 6, 1> reference_state_;
+  Eigen::Matrix<double, 3, 1> reference_ff_;
   bool enable_flatness_ff_;
   
   /* Rate of execution for LQR's feedback */
@@ -58,8 +58,11 @@ class LQRController : public rclcpp::Node
   /* System matrices */
   Eigen::MatrixXf sys_A_, sys_B_;
   Eigen::MatrixXf lqr_Q_, lqr_R_;
-  Eigen::Matrix<double, 4, 7> lqr_K_;
+  Eigen::Matrix<double, 3, 6> lqr_K_;
+  Eigen::Matrix<double, 4, 3> wheel_geometry_matrix_;
+  double wheel_rad_;
   bool use_stricter_gains_;
+  std::string controller_type_;
   
   /* Vehicle properties */
   float total_mass_;
@@ -97,7 +100,7 @@ class LQRController : public rclcpp::Node
     void biasEnableServer( const BoolServ::Request::SharedPtr,
                            const BoolServ::Response::SharedPtr );
     
-    rclcpp::Publisher<RPYT_Command>::SharedPtr atti_cmd_pub_;
+    rclcpp::Publisher<Wheel_Command>::SharedPtr wheel_cmd_pub_;
     rclcpp::Publisher<CTRL_Debug>::SharedPtr controller_debug_pub_;
     
     rclcpp::TimerBase::SharedPtr controller_timer_;
@@ -110,6 +113,6 @@ class LQRController : public rclcpp::Node
     static constexpr inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
     
     /* estimate actual mass in flight */
-    void estimateMass( const Eigen::Matrix<double, 4, 1> &, rclcpp::Time & );
+    void estimateMass( const double &, rclcpp::Time & );
     rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr est_mass_pub_;
 };

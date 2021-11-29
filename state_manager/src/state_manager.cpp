@@ -98,7 +98,7 @@ void StateManager::initMocapManager()
 
 void StateManager::initTfManager()
 {
-  declare_parameter<int>( "tf_rate", 200 );
+  declare_parameter<int>( "tf_rate", 50 );
   declare_parameter<std::string>( "state_base_frame", "map" );
   declare_parameter<std::string>( "state_my_frame", "agent_1" );
   
