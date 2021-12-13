@@ -8,7 +8,7 @@
    -- aj / 17th Nov, 2017.
 */
 
-#include "lqr_control_bias.h"
+#include "lqr_ctrl_flight.h"
 
 #define ROS_NODE_NAME "lqg_control"
 #define pi 3.1416

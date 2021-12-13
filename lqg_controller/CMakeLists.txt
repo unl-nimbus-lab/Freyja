@@ -4,9 +4,6 @@ add_compile_options( -std=c++14 -O3 -ffast-math -Wall )
 
 
 find_package(ament_cmake REQUIRED)
-#pkg_search_module( Eigen3 REQUIRED eigen3 )
-#find_package( Eigen REQUIRED )
-
 
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -23,17 +20,16 @@ add_definitions( ${EIGEN3_DEFINITIONS} )
 
 include_directories(include)
 include_directories(
-#  ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
 )
 
 # lqr with bias estimator 
-add_executable(lqg_control_node src/lqr_control_bias.cpp src/bias_estimator.cpp)
-target_include_directories( lqg_control_node PUBLIC
+add_executable(lqg_flight_node src/lqr_ctrl_flight.cpp src/bias_estimator.cpp)
+target_include_directories( lqg_flight_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies( lqg_control_node 
+ament_target_dependencies( lqg_flight_node 
   rclcpp
   std_msgs
   freyja_msgs
@@ -42,7 +38,7 @@ ament_target_dependencies( lqg_control_node
 )
 
 install(TARGETS
-  lqg_control_node
+  lqg_flight_node
   DESTINATION lib/${PROJECT_NAME})
 
 # lqr with only velocity control 
