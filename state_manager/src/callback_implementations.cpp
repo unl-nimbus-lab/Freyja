@@ -46,14 +46,17 @@ void StateManager::mocapCallback( const TFStamped::ConstSharedPtr msg )
   
   /* rpy */
   tf2::Quaternion q;
-  // tf2::quaternionMsgToTF( msg -> transform.rotation, q );
   double roll, pitch, yaw;
-  // tf2::Matrix3x3(q).getRPY( roll, pitch, yaw );
+
+  //tf2::fromMsg( msg -> transform.rotation, q );
+  //tf2::Matrix3x3(q).getRPY( roll, pitch, yaw );
   tf2::convert( msg -> transform.rotation, q );
   tf2::impl::getEulerYPR( q, yaw, pitch, roll );
+  //RCLCPP_INFO( get_logger(), "map frame yaw: %0.3f", yaw );
+  yaw = F_PI/2.0 - yaw;
   state_vector_[6] = roll;
   state_vector_[7] = pitch;
-  state_vector_[8] = -yaw;
+  state_vector_[8] = yaw;
 
   
   /* rpy rates (no filter yet, use with caution!) */
@@ -88,7 +91,11 @@ void StateManager::timerTfCallback()
   /* This is a timer callback */
   static TFStamped tform;
   
-  tform = tf_buffer_ -> lookupTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero );
+  if( tf_buffer_ -> canTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero, tf2::Duration(0) ) )
+  {
+    tform = tf_buffer_ -> lookupTransform( tf_base_frame_, tf_my_frame_, tf2::TimePointZero );
+    mocapCallback( std::make_shared<const TFStamped>( tform ) );
+  }
 
 }
 

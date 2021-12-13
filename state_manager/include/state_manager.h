@@ -9,6 +9,7 @@
 #ifndef __STATE_INFO_GENERATOR_H__
 #define __STATE_INFO_GENERATOR_H__
 
+#include <memory>
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
@@ -22,6 +23,7 @@
 #include <tf2/impl/utils.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 #include "freyja_msgs/msg/current_state.hpp"
 #include "freyja_msgs/msg/asctec_data.hpp"
@@ -83,7 +85,8 @@ class StateManager: public rclcpp::Node
   std::string tf_base_frame_;
   std::string tf_my_frame_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-  
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
   /* containers for handling gps data */
   double home_lat_, home_lon_;
   bool have_location_fix_;
