@@ -8,6 +8,8 @@ typedef robomaster_interfaces::msg::WheelSpeed WheelSpeed;    // rpm or normalis
 
 using std::placeholders::_1;
 
+#define OMEGA2RPM(W) ((W)*9.55)
+
 class S1Handler : public rclcpp::Node
 {
   WheelSpeed target_wheel_rpm_;
@@ -37,10 +39,10 @@ void S1Handler::wheelSpeedCallback( const WheelCommand::ConstSharedPtr msg )
   /* The controller outputs target wheel speeds in rad/s. We must convert them into
     RPMs in the range [-1000, 1000] (int16_t) for DJI
   */
-  target_wheel_rpm_.fl = std::round( msg -> w1 );
-  target_wheel_rpm_.fr = std::round( msg -> w2 );
-  target_wheel_rpm_.rr = std::round( msg -> w3 );
-  target_wheel_rpm_.rl = std::round( msg -> w4 );
+  target_wheel_rpm_.fl = std::round( OMEGA2RPM(msg -> w1) );
+  target_wheel_rpm_.fr = std::round( OMEGA2RPM(msg -> w2) );
+  target_wheel_rpm_.rr = std::round( OMEGA2RPM(msg -> w3) );
+  target_wheel_rpm_.rl = std::round( OMEGA2RPM(msg -> w4) );
 
   speed_rpm_pub_ -> publish( target_wheel_rpm_ );
 }

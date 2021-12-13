@@ -8,7 +8,7 @@
    -- aj / 17th Nov, 2017.
 */
 
-#include "lqr_ctrl_flight.h"
+#include "lqr_ctrl_omni4wheel.h"
 
 #define ROS_NODE_NAME "lqg_control"
 #define pi 3.1416
@@ -26,15 +26,16 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   declare_parameter<bool>( "mass_correction", false );
   declare_parameter<bool>( "mass_estimation", true );
   declare_parameter<std::string>( "bias_compensation", "auto" );
+  declare_parameter<std::string>( "controller_type", "order-2" );
+
+  declare_parameter<double>( "chassis_length", 0.4 );
+  declare_parameter<double>( "chassis_width", 0.3 );
+  declare_parameter<double>( "wheel_radius", 0.10 );
   
   get_parameter( "controller_rate", controller_rate_ );
   get_parameter( "total_mass", total_mass_ );
   get_parameter( "use_stricter_gains", use_stricter_gains_ );
-  
-  
-  /* initialise system, matrices and controller configuration */
-  initLqrSystem();
-  
+
   
   /* Associate a subscriber for the current vehicle state */
   state_sub_ = create_subscription<CurrentState>( "current_state", 1,
@@ -49,17 +50,13 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   
   
   /* Announce publishers for controller output */
-  atti_cmd_pub_ = create_publisher <RPYT_Command>
-                    ( "rpyt_command", 1 );
+  wheel_cmd_pub_ = create_publisher <Wheel_Command>
+                    ( "wheel_command", 1 );
   controller_debug_pub_ = create_publisher <CTRL_Debug>
                     ( "controller_debug", 1 );
   est_mass_pub_ = create_publisher <std_msgs::msg::Float32>
                     ( "freyja_estimated_mass", 1 );
 
-  /* Timer to run the LQR controller perdiodically */
-  float controller_period = 1.0/controller_rate_;
-  controller_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(controller_period),
-                           std::bind( &LQRController::computeFeedback, this ) );
   
   /* Checks for correctness */
   STATEFB_MISSING_INTRV_ = 0.5;
@@ -80,7 +77,7 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   
   /* Differential flatness feed-forward accelerations */
   get_parameter( "enable_flatness_ff", enable_flatness_ff_ );
-  reference_ff_ << 0.0, 0.0, 0.0, 0.0;
+  reference_ff_ << 0.0, 0.0, 0.0;
   
   
   /* Mass estimation */
@@ -92,6 +89,16 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
     enable_dyn_mass_estimation_ = true;
     RCLCPP_WARN( get_logger(), "LQR: Mass correction active at init! This is discouraged." );
   }
+
+
+  /* initialise system, matrices and controller configuration */
+  initLqrSystem();
+
+  /* Timer to run the LQR controller perdiodically */
+  float controller_period = 1.0/controller_rate_;
+  controller_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(controller_period),
+                           std::bind( &LQRController::computeFeedback, this ) );
+
 }
 
 void LQRController::initLqrSystem()
@@ -107,23 +114,67 @@ void LQRController::initLqrSystem()
     lqr_Q_ = [..];  (7x7) Q.diag = [1, 1, 8, 0.01, 0.01, 0.1, 1]
     lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
   */
-  lqr_K_ << 1.118, 0.0, 0.0, 1.4995, 0.0, 0.0, 0.0,
-            0.0, 1.118, 0.0, 0.00, 1.4995, 0.0, 0.0,
-            0.0, 0.0, 3.1623, 0.0, 0.0, 2.5347, 0.0,
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-            
+  get_parameter( "controller_type", controller_type_ );
+  if( controller_type_ == "order-2" )
+  {
+    lqr_K_ <<   2.4472,   0,        0,        1.0472,   0,        0,
+              0,        2.4472,   0,        0,        1.0472,   0,
+              0,        0,        0.4162,   0,        0,        0.023162;
+  }
+  else if( controller_type_ == "order-1-ff" )
+  {
+    lqr_K_ <<   2.1472,   0,        0,        0,   0,        0,
+              0,        2.1472,   0,        0,        0,   0,
+              0,        0,        1.4162,   0,        0,        0.3;
+    enable_flatness_ff_ = true;
+  } 
+  else if( controller_type_ == "order-1-no-ff" )
+  {
+    lqr_K_ <<   3.4472,   0,        0,        0,   0,        0,
+              0,        3.4472,   0,        0,        0,   0,
+              0,        0,        0.8162,   0,        0,        0.02;
+  }
+  else if( controller_type_ == "order-0-ff" )
+  {
+    lqr_K_ <<   0,   0,        0,        0,   0,        0,
+              0,        0,   0,        0,        0,   0,
+              0,        0,        0.8162,   0,        0,        0;
+   enable_flatness_ff_ = true;
+  }
+  else if( controller_type_ == "order-2-ff" )
+  {
+    lqr_K_ <<  0.8472,   0,        0,        0.872,   0,        0,
+              0,        0.8472,   0,        0,        0.872,    0,
+              0,        0,        1.1162,   0,        0,        0.2;
+    enable_flatness_ff_ = true;
+  }
+  RCLCPP_WARN( get_logger(), "Flatness: %0.3f", float(enable_flatness_ff_) );
    /* little more aggresive:
     lqr_Q_ = [..];  (7x7) Q.diag = [1.2, 1.2, 8.2, 0.02, 0.02, 0.1, 1]
     lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
   */
   if( use_stricter_gains_ )
   {
-    lqr_K_ << 1.225, 0.0, 0.0, 1.5731, 0.0, 0.0, 0.0,
-              0.0, 1.225, 0.0, 0.00, 1.5731, 0.0, 0.0,
-              0.0, 0.0, 3.2016, 0.0, 0.0, 2.550, 0.0,
-              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
+    lqr_K_ << 1.225, 0.0, 0.0, 0.5731, 0.0, 0.0, 
+              0.0, 1.225, 0.0, 0.00, 1.5731, 0.0, 
+              0.0, 0.0, 3.2016, 0.0, 0.0, 2.550;
     RCLCPP_WARN( get_logger(), "LQR: stricter gains requested!" );
   }
+
+  double ch_l, ch_w;
+  get_parameter( "wheel_radius", wheel_rad_ );
+  get_parameter( "chassis_length", ch_l );
+  get_parameter( "chassis_width", ch_w );
+    
+  double chassis_lw = ch_l + ch_w;  
+  wheel_geometry_matrix_ << 1.0,  -1.0, -chassis_lw,
+                            1.0,   1.0,  chassis_lw,
+                            1.0,  -1.0,  chassis_lw,
+                            1.0,   1.0, -chassis_lw;
+  wheel_geometry_matrix_ << 1.0,   1.0,  chassis_lw,
+                            1.0,  -1.0, -chassis_lw,
+                            1.0,   1.0, -chassis_lw,
+                            1.0,  -1.0,  chassis_lw;
 }
 
 void LQRController::biasEnableServer( const BoolServ::Request::SharedPtr rq,
@@ -159,17 +210,17 @@ constexpr double LQRController::calcYawError( const double &a, const double &b )
 void LQRController::stateCallback( const CurrentState::ConstSharedPtr msg )
 {
   /* Parse message to obtain state and reduced state information */
-  static Eigen::Matrix<double, 7, 1> current_state;
-  static Eigen::Matrix<double, 7, 1> state_err;
+  static Eigen::Matrix<double, 6, 1> current_state;
+  static Eigen::Matrix<double, 6, 1> state_err;
 
   float yaw = msg->state_vector[8];
   rot_yaw_ << std::cos(yaw), std::sin(yaw), 0,
              -std::sin(yaw), std::cos(yaw), 0,
               0, 0, 1;
              
-  /* state is the first 6 elements, and yaw */
-  current_state << Eigen::Map<const PosVelNED>( msg->state_vector.data() ),
-                   double(yaw);
+  /* state  */
+  current_state << msg->state_vector[0], msg->state_vector[1], double(yaw),
+                   msg->state_vector[3], msg->state_vector[4], msg->state_vector[11];
 
   /* set measurement for bias estimator */
   if( bias_compensation_req_ )
@@ -182,7 +233,7 @@ void LQRController::stateCallback( const CurrentState::ConstSharedPtr msg )
     rsmtx.lock();
     state_err.head<6>() = current_state.head<6>() - reference_state_.head<6>();
     /* yaw-error is done differently */
-    state_err(6) = calcYawError( current_state(6), reference_state_(6) );
+    state_err(2) = calcYawError( current_state(2), reference_state_(2) );
     rsmtx.unlock();
     reduced_state_ = std::move( state_err );
     have_state_update_ = true;
@@ -200,10 +251,11 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstSharedPtr m
     Not currently using accelerations for FF.
   */
   reference_state_mutex_.lock();
-  reference_state_ << msg->pn, msg->pe, msg->pd, msg->vn, msg->ve, msg->vd, msg->yaw;
+  reference_state_ << msg->pn, msg->pe, msg->yaw, msg->vn, msg->ve, 0.0;
   reference_state_mutex_.unlock();
   
-  reference_ff_ << msg->an, msg->ae, msg->ad, 0.0;    // only NED accelerations
+  //if( controller_type_ == "order-1-ff" )
+  reference_ff_ << msg->vn, msg->ve, 0.0;    // only NED accelerations
   have_reference_update_ = true;
 }
 
@@ -214,10 +266,9 @@ void LQRController::computeFeedback( )
   if( !have_state_update_ )
     return;
   
-  float roll, pitch, yaw;
-  double T;
-  static Eigen::Matrix<double, 4, 1> control_input;
-  static Eigen::Matrix<double, 7, 1> state_err;
+  static Eigen::Matrix<double, 4, 1> wheel_speeds;
+  static Eigen::Matrix<double, 3, 1> control_input;
+  static Eigen::Matrix<double, 6, 1> state_err;
   
   bool state_valid = true;
   auto tnow = now();
@@ -226,10 +277,9 @@ void LQRController::computeFeedback( )
   float state_age = (tnow - last_state_update_t_).seconds();
   if( state_age > STATEFB_MISSING_INTRV_ )
   {
-    /* State feedback missing for more than specified interval. Try descend */
-    roll = pitch = yaw = 0.0;
-    T = (total_mass_ * 9.81) - 0.5;
-    control_input << 0.0, 0.0, 0.0, 0.0;
+    /* State feedback missing for more than specified interval. Stop motors */
+    control_input.setZero();
+    wheel_speeds.setZero();
     state_valid = false;
   }
   else
@@ -239,9 +289,8 @@ void LQRController::computeFeedback( )
     control_input = -1 * lqr_K_ * state_err 
                     + static_cast<double>(enable_flatness_ff_) * reference_ff_;
   
-    /* Force saturation on downward acceleration */
-    control_input(2) = std::min( control_input(2), 8.0 );
-    control_input(2) -= 9.81;
+    /* Force saturation on acceleration */
+
     
     /* See if bias compensation was requested .. */
     if( bias_compensation_req_ )
@@ -250,42 +299,38 @@ void LQRController::computeFeedback( )
       control_input.head<3>() -= f_biases_.head<3>();
     }
   
-    /* Thrust */
-    T = total_mass_ * control_input.head<3>().norm();
-  
-    /* Roll, pitch and yawrate */
-    Eigen::Matrix<double, 3, 1> Z = rot_yaw_ * control_input.head<3>() * (-total_mass_/T);
-    roll = std::asin( -Z(1) );
-    pitch = std::atan( Z(0)/Z(2) );
-    yaw = control_input(3);
+    /* Decompose accelerations to wheel speeds */
+    wheel_speeds = (1.0/wheel_rad_) * wheel_geometry_matrix_ * rot_yaw_ * control_input;
   }
   
   /* Actual commanded input */
-  RPYT_Command ctrl_cmd;
-  ctrl_cmd.roll = roll;
-  ctrl_cmd.pitch = pitch;
-  ctrl_cmd.yaw = yaw;
-  ctrl_cmd.thrust = T;
+  Wheel_Command ctrl_cmd;
+  ctrl_cmd.w1 = wheel_speeds(0);
+  ctrl_cmd.w2 = wheel_speeds(1);
+  ctrl_cmd.w3 = wheel_speeds(2);
+  ctrl_cmd.w4 = wheel_speeds(3);
   ctrl_cmd.ctrl_mode = 0b00001111;
-  atti_cmd_pub_ -> publish( ctrl_cmd );
+  wheel_cmd_pub_ -> publish( ctrl_cmd );
   
 
   /* Tell bias estimator about new control input */
+  static Eigen::Matrix<double,4,1> bias_ctrl_input;
+  bias_ctrl_input << control_input, 0.0;
   if( bias_compensation_req_ )
-    bias_est_.setControlInput( control_input );
+    bias_est_.setControlInput( bias_ctrl_input );
     
   /* Update the total flying mass if requested */
   if( enable_dyn_mass_estimation_ )
-    estimateMass( control_input, tnow );
+    estimateMass( control_input(2), tnow );
     
   /* Debug information */
   static CTRL_Debug debug_msg;
   debug_msg.header.stamp = tnow;
-  for( uint8_t idx=0; idx<4; idx++ )
+  for( uint8_t idx=0; idx<3; idx++ )
     debug_msg.lqr_u[idx] = static_cast<float>(control_input(idx));
   for( uint8_t idx=0; idx<3; idx++ )
     debug_msg.biasv[idx] = static_cast<float>(f_biases_(idx));
-  for( uint8_t idx=0; idx<7; idx++ )
+  for( uint8_t idx=0; idx<6; idx++ )
     debug_msg.errv[idx] = static_cast<float>(state_err(idx));
 
   debug_msg.flags = (debug_msg.BIAS_EN * bias_compensation_req_) |
@@ -295,7 +340,7 @@ void LQRController::computeFeedback( )
   controller_debug_pub_ -> publish( debug_msg ); 
 }
 
-void LQRController::estimateMass( const Vector4d &c, rclcpp::Time &t )
+void LQRController::estimateMass( const double &c, rclcpp::Time &t )
 {
   /* Experimental module that estimates the true mass of the system in air.
     It uses the provided mass and observes the deviation from expected output
@@ -311,7 +356,7 @@ void LQRController::estimateMass( const Vector4d &c, rclcpp::Time &t )
   if( (t-t_last).seconds() < 3.0 )
     return;
 
-  float ctrl_effort = c(2) + 9.81;
+  float ctrl_effort = c + 9.81;
   float estimated_mass = total_mass_*(9.81 - ctrl_effort)/9.81;
   // basic low-pass filter to prevent wild jitter
   estimated_mass = (prev_estimated_mass + estimated_mass)/2.0;

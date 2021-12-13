@@ -48,12 +48,13 @@ void StateManager::mocapCallback( const TFStamped::ConstSharedPtr msg )
   tf2::Quaternion q;
   double roll, pitch, yaw;
 
-  //tf2::fromMsg( msg -> transform.rotation, q );
-  //tf2::Matrix3x3(q).getRPY( roll, pitch, yaw );
+  // Equivalent / alternative style:
+  //    tf2::fromMsg( msg -> transform.rotation, q );
+  //    tf2::Matrix3x3(q).getRPY( roll, pitch, yaw );
   tf2::convert( msg -> transform.rotation, q );
   tf2::impl::getEulerYPR( q, yaw, pitch, roll );
-  //RCLCPP_INFO( get_logger(), "map frame yaw: %0.3f", yaw );
-  yaw = F_PI/2.0 - yaw;
+
+  yaw = F_PI/2.0 - yaw;         // convert ENU yaw to NED yaw
   state_vector_[6] = roll;
   state_vector_[7] = pitch;
   state_vector_[8] = yaw;

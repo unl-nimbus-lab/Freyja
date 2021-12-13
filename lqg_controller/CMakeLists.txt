@@ -23,7 +23,7 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
 )
 
-# lqr with bias estimator 
+# lqr with bias estimator: FLIGHT
 add_executable(lqg_flight_node src/lqr_ctrl_flight.cpp src/bias_estimator.cpp)
 target_include_directories( lqg_flight_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -36,9 +36,26 @@ ament_target_dependencies( lqg_flight_node
   geometry_msgs
   std_srvs
 )
-
 install(TARGETS
   lqg_flight_node
+  DESTINATION lib/${PROJECT_NAME})
+
+
+# lqr with bias estimator: OMNIWHEEL  
+add_executable(lqg_4wheel_node src/lqr_ctrl_omni4wheel.cpp src/bias_estimator.cpp)
+target_include_directories( lqg_flight_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies( lqg_4wheel_node 
+  rclcpp
+  std_msgs
+  freyja_msgs
+  geometry_msgs
+  std_srvs
+)
+install(TARGETS
+  lqg_4wheel_node
   DESTINATION lib/${PROJECT_NAME})
 
 # lqr with only velocity control 
