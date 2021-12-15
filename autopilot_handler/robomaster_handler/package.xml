@@ -11,7 +11,7 @@
   <depend>rclcpp</depend>
   <depend>freyja_msgs</depend>
   <depend>std_msgs</depend>
-  <depend>robomaster_interfaces</depend>
+  <depend>robomaster_msgs</depend>
 
 
   <export>

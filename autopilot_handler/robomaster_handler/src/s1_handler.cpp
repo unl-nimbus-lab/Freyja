@@ -1,10 +1,10 @@
 #include "rclcpp/rclcpp.hpp"
 
-#include "robomaster_interfaces/msg/wheel_speed.hpp"
+#include "robomaster_msgs/msg/wheel_speed.hpp"
 #include <freyja_msgs/msg/wheel_command.hpp>
 
 typedef freyja_msgs::msg::WheelCommand WheelCommand;          // rad/s from controller
-typedef robomaster_interfaces::msg::WheelSpeed WheelSpeed;    // rpm or normalised to vehicle
+typedef robomaster_msgs::msg::WheelSpeed WheelSpeed;    // rpm or normalised to vehicle
 
 using std::placeholders::_1;
 

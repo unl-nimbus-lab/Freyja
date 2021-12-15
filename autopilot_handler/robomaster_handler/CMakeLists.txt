@@ -9,7 +9,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(freyja_msgs REQUIRED)
-find_package(robomaster_interfaces REQUIRED)
+find_package(robomaster_msgs REQUIRED)
 
 find_package(rosidl_default_generators REQUIRED)
  
@@ -21,7 +21,7 @@ ament_target_dependencies( s1_interface
   rclcpp
   std_msgs
   freyja_msgs
-  robomaster_interfaces
+  robomaster_msgs
 )
 
 install(TARGETS
