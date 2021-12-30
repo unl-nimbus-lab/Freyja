@@ -73,6 +73,89 @@ class Temporal_Traj : public rclcpp::Node
 		traj_pub->publish(ref_state);
 	}
 
+	// HOVER AT A POINT
+	TrajRef getHoverReference( const  rclcpp::Time &cur_time )
+	{
+	  TrajRef ref_state;
+	  ref_state.pn = 0.0;
+	  ref_state.pe = 0.0;
+	  ref_state.pd = -0.75;
+	  ref_state.vn = 0.0;
+	  ref_state.ve = 0.0;
+	  ref_state.vd = 0.0;
+	  ref_state.yaw = DEG2RAD(0.0);
+	  ref_state.an = 0.0;
+	  ref_state.ae = 0.0;
+	  ref_state.ad = 0.0;
+	  ref_state.header.stamp = now();
+	  //ref_state.header.stamp = this->now();
+	  //ref_state.header.stamp = this->get_clock().now().to_msg();
+	  return ref_state;
+	}
+
+	// CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
+	TrajRef getCircleReference( const rclcpp::Time &cur_time, const int agg_level)
+	{
+	  // A is amplitude (radius); w angular rate such that 2pi/w = (seconds for one rev)
+	  float A = 0.5;
+	  float w = 0.5;
+
+	  // Set A and w based on agg_level
+	  switch(agg_level)
+		{
+	    case 1 :
+	      break;
+	    case 2 :
+	      A = 0.5;
+	      w = 1;
+	      break;
+	    case 3 :
+	      A = 1;
+	      w = 3;
+	      break;
+	    default :
+	      RCLCPP_WARN("Circle aggression " << agg_level << " not supported, defaulting to agg_level 1");
+		}
+
+		float t = cur_time.seconds();
+
+  	// Create reference state
+  	TrajRef ref_state;
+  	ref_state.header.stamp = now();
+
+  	ref_state.pn = A*std::sin( w*t );
+  	ref_state.pe = A*std::cos( w*t );
+  	ref_state.pd = -4.0;
+
+  	ref_state.vn = A*w*std::cos( w*t );
+  	ref_state.ve = -A*w*std::sin( w*t );
+  	ref_state.vd = 0.0;
+
+  	ref_state.yaw = 0.0;
+
+  	// set an, ae, ad to second derivatives if needed for FF..
+  	return ref_state;
+
+	}
+
+	TrajRef getDefaultReference( const ros::Duration &cur_time )
+	{
+	  TrajRef ref_state;
+	  ref_state.pn = 0.5;
+	  ref_state.pe = 0.5;
+	  ref_state.pd = -1.0;
+	  ref_state.vn = 0.0;
+	  ref_state.ve = 0.0;
+	  ref_state.vd = 0.0;
+	  ref_state.yaw = DEG2RAD(0.0);
+	  ref_state.an = 0.0;
+	  ref_state.ae = 0.0;
+	  ref_state.ad = 0.0;
+	  ref_state.header.stamp = now();
+
+		return ref_state;
+	}
+
 	rclcpp::Publisher<TrajRef>::SharedPtr traj_pub;
 	rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr time_reset_sub;
 	rclcpp::TimerBase::SharedPtr traj_update_timer;
