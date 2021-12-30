@@ -1,152 +1,91 @@
-/* Provides a trajectory for the vehicle to follow.
-
-  EXAMPLE FILE; ONLY FOR SUPPORT.
-
-  Whatever you do here, output a time-based continuous function to follow.
-  This node should generate a 7 vector: [pn pe pd vn ve vd yaw]' for the vehicle
-  to follow. The controller currently listens to this reference trajectory
-  and updates its knowledge of the "latest" reference point.
-  
-  -- aj / 23rd Nov, 2017.
+/**
+* Outputs a time-based continuous function to follow.
+* Generates a reference vector: '[pn pe pd vn ve vd yaw]' for the vehicle to follow
 */
+
+#include <chrono>
 #include <cmath>
-#include <ros/ros.h>
-#include <std_msgs/UInt8.h>
-#include <freyja_msgs/ReferenceState.h>
+
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/u_int8.hpp"
+#include "freyja_msgs/msg/ReferenceState.hpp"
 
 #define ROS_NODE_NAME "trajectory_provider"
+#define UPDATE_RATE 100															// update rate of the trajectory (Hz)
 typedef freyja_msgs::ReferenceState TrajRef;
 
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
 
-// global decl for "start time". This can be reset by a callback
-ros::Time init_time;
+using std::placeholders::_1;
 
-void timeResetCallback( const std_msgs::UInt8::ConstPtr &msg )
+rclcpp::Time init_time;
+
+class Temporal_Traj : public rclcpp::Node
 {
-  if( msg -> data == 1 )
-  {
-    init_time = ros::Time::now();
-    ROS_WARN( "%s: Time reset requested!", ROS_NODE_NAME );
-  }
-}
+	public:
+		TrajRef()
+		: Node(ROS_NODE_NAME)
+		{
+			this->declare_parameter("traj_type", traj_type);
+			this->get_parameter("traj_type", traj_type);
 
-// HOVER AT A POINT 
-TrajRef getHoverReference( const ros::Duration &cur_time )
+			this->declare_parameter("agg_level", agg_level);
+  		this->get_parameter("agg_level", agg_level);
+
+			traj_pub = this->create_publisher<TrajRef>("/reference_state", 1);
+
+			time_reset_sub = this->create_subscription<std_msgs::msg::UInt8>(
+			"/reset_trajectory_time", 1, std::bind(&Temporal_Traj::timer_reset_cb, this, _1));
+
+			traj_update_timer = this->create_wall_timer(
+      1/UPDATE_RATE, std::bind(&SbusComm::traj_update_cb, this));
+
+		}
+
+	void timer_reset_cb( const std_msgs::msg::UInt8::SharedPtr msg )
+	{
+		if (msg -> data == 1)
+		{
+			init_time = now();
+			RCLCPP_WARN(this->get_logger(), "%s: Time reset requested!", ROS_NODE_NAME);
+		}
+	}
+
+	void traj_update_cb()
+	{
+		if (traj_type == "hover")
+		{
+			ref_state = getHoverReference(now() - init_time);
+		}
+		else if (traj_type == "circle")
+		{
+			ref_state = getCircleReference(now() - init_time, agg_level);
+		}
+		else if (traj_type == "lemiscate")
+		{
+			ref_state = getLemiscateReference(now() - init_time, agg_level);
+		}
+		else
+		{
+			RCLCPP_ERROR(this->get_logger(), "Invalid trajectory parameters given.")
+		}
+
+		traj_pub->publish(ref_state);
+	}
+
+	rclcpp::Publisher<TrajRef>::SharedPtr traj_pub;
+	rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr time_reset_sub;
+	rclcpp::TimerBase::SharedPtr traj_update_timer;
+};
+
+int main(int argc, char * argv[])
 {
-  TrajRef ref_state;
-  ref_state.pn = 0.0;
-  ref_state.pe = 0.0;
-  ref_state.pd = -0.75;
-  ref_state.vn = 0.0;
-  ref_state.ve = 0.0;
-  ref_state.vd = 0.0;
-  ref_state.yaw = DEG2RAD(0.0);
-  ref_state.an = 0.0;
-  ref_state.ae = 0.0;
-  ref_state.ad = 0.0;
-  ref_state.header.stamp = ros::Time::now();
-  return ref_state;
-}
+	init_time = now();
 
-// CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
-TrajRef getCircleReference( const ros::Duration &cur_time, const int agg_level)
-{
-  // A is amplitude (radius); w angular rate such that 2pi/w = (seconds for one rev)
-  float A = 0.5;
-  float w = 0.5;
-
-  // Set A and w based on agg_level
-  switch(agg_level) {
-    case 1 :
-      break;
-    case 2 :
-      A = 0.5;
-      w = 1;
-      break;
-    case 3 :
-      A = 1;
-      w = 3;
-      break;
-    default :
-      ROS_WARN_STREAM("Circle aggression " << agg_level << " not supported, defaulting to agg_level 1");
-  }
-
-  float t = cur_time.toSec();
-
-  // Create reference state
-  TrajRef ref_state;
-  ref_state.header.stamp = ros::Time::now();
-
-  ref_state.pn = A*std::sin( w*t );
-  ref_state.pe = A*std::cos( w*t );
-  ref_state.pd = -1.0;
-  
-  ref_state.vn = A*w*std::cos( w*t );
-  ref_state.ve = -A*w*std::sin( w*t );
-  ref_state.vd = 0.0;
-
-  ref_state.yaw = 0.0;
-
-  // set an, ae, ad to second derivatives if needed for FF..
-  return ref_state;
-}
-
-TrajRef getDefaultReference( const ros::Duration &cur_time )
-{
-  TrajRef ref_state;
-  ref_state.pn = 0.5;
-  ref_state.pe = 0.5;
-  ref_state.pd = -1.0;
-  ref_state.vn = 0.0;
-  ref_state.ve = 0.0;
-  ref_state.vd = 0.0;
-  ref_state.yaw = DEG2RAD(0.0);
-  ref_state.an = 0.0;
-  ref_state.ae = 0.0;
-  ref_state.ad = 0.0;
-  ref_state.header.stamp = ros::Time::now();
-  return ref_state;
-}
-
-int main( int argc, char** argv )
-{
-  ros::init( argc, argv, ROS_NODE_NAME );
-  ros::NodeHandle nh, priv_nh("~");
-
-  /* Publisher for trajectory */
-  ros::Publisher traj_pub;
-  traj_pub = nh.advertise <TrajRef> ( "/reference_state", 1, true );
-  
-  /* Create subscriber for resetting time -- restart the trajectory */
-  ros::Subscriber time_reset_sub;
-  time_reset_sub = nh.subscribe( "/reset_trajectory_time", 1, timeResetCallback );
-  
-  std::string traj_type;
-  priv_nh.param( "example_traj_type", traj_type, std::string("hover") );
-
-  /* How fast should a trajectory update be made? */
-  ros::Rate update_rate(50);
-  init_time = ros::Time::now();
-
-  while( ros::ok() )
-  {
-    TrajRef ref_state;
-    if( traj_type == "circle1" )
-      ref_state = getCircleReference( ros::Time::now() - init_time, 1 );
-    else if( traj_type == "circle2" )
-      ref_state = getCircleReference( ros::Time::now() - init_time, 2 );
-    else if( traj_type == "circle3" )
-      ref_state = getCircleReference( ros::Time::now() - init_time, 3 );
-    else if( traj_type == "hover" )
-      ref_state = getHoverReference( ros::Time::now() - init_time );
-    else
-      ref_state = getDefaultReference( ros::Time::now() - init_time );
-    traj_pub.publish( ref_state );
-
-    ros::spinOnce();
-    update_rate.sleep();
-  }
-
+	rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<Temporal_Traj>());  
+  rclcpp::shutdown();
   return 0;
+
 }
+
