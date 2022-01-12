@@ -156,9 +156,55 @@ TrajRef Temporal_Traj::getDefaultReference( rclcpp::Duration cur_time )
 	return ref_state;
 }
 
+/** LEMISCATE OF BERNOULLI / Figure-8:
+* pn = A*cos(wt)/(1+sin^2(wt))
+* pe = A*sin(wt*)cos(wt)/(1+sin^2(wt))
+* vn = {A*w*sin(wt)(sin^2(wt)−3)}/{(sin^2(wt)+1)^2}
+* ve = {2*A*w*(3*cos(2*wt)−1)}/{(cos(2*wt)−3)^2}
+*/
+TrajRef Temporal_Traj::getLemiscateReference( rclcpp::Duration cur_time, const int agg_level)
 {
+  // A is amplitude (radius); w angular rate such that 2pi/w = (seconds for one rev)
+  float A = 0.5;
+  float w = 0.5;
 
+  // Set A and w based on agg_level
+  switch(agg_level)
+	{
+    case 1 :
+      break;
+    case 2 :
+      A = 0.5;
+      w = 1;
+      break;
+    case 3 :
+      A = 1;
+      w = 3;
+      break;
+    default :
+      RCLCPP_WARN(get_logger(), "Lemiscate aggression %d not supported, defaulting to agg_level 1", agg_level);
+	}
 
+	float t = cur_time.seconds();
+
+	// Create reference state
+	TrajRef ref_state;
+	ref_state.header.stamp = now();
+
+	ref_state.pn = A * std::cos(w*t)/(1+pow(std::sin(w*t),2));
+	ref_state.pe = A * std::sin(w*t)*std::cos(w*t)/(1+pow(std::sin(w*t),2));
+	ref_state.pd = -4.0;
+
+	ref_state.vn = ( A * w * std::sin(w*t)*( pow(std::sin(w*t),2)-3)) / ( pow( pow( std::sin(w*t),2)+1 ,2));
+	ref_state.ve = ( 2 * A * w * (3*std::cos(2*w*t)-1)) / ( pow( std::cos(2*w*t)-3 , 2) );
+	ref_state.vd = 0.0;
+
+	ref_state.yaw = 0.0;
+
+	// set an, ae, ad to second derivatives if needed for FF..
+	return ref_state;
+
+}
 
 int main(int argc, char * argv[])
 {
