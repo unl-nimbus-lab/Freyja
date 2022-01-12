@@ -1,40 +1,31 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(freyja_examples)
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3" )
+add_compile_options( -std=c++14 -O3 -ffast-math -Wall )
 
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  geometry_msgs
-  message_generation
-  roscpp
-  freyja_msgs
-  std_msgs
-)
+find_package(ament_cmake REQUIRED)
 
-
-catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES trajectory_provider
-  CATKIN_DEPENDS geometry_msgs message_generation message_runtime roscpp std_msgs
-#  DEPENDS system_lib
-)
-
-###########
-## Build ##
-###########
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(freyja_msgs REQUIRED)
 
 include_directories(include)
-include_directories(
-  ${catkin_INCLUDE_DIRS}
+
+add_executable(temporal_provider src/temporal_provider.cpp)
+
+target_include_directories( temporal_provider PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
 )
 
-# simple trajectory provider
-add_executable(temporal_provider_node src/temporal_provider.cpp)
-add_dependencies(temporal_provider_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+ament_target_dependencies( temporal_provider
+	rclcpp
+	freyja_msgs
+	std_msgs
+)
 
-target_link_libraries(temporal_provider_node
-   ${catkin_LIBRARIES}
- )
- 
+install(TARGETS
+  temporal_provider
+  DESTINATION lib/${PROJECT_NAME})
+
+ament_package()
