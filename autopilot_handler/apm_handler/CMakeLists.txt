@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.8)
 project(apm_handler)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11 -O3)
+add_compile_options(-std=c++14 -O3)
 
 SET(NO_PIXHAWK "false" CACHE BOOL "Building Pixhawk interface handler or not?")
 
@@ -11,36 +11,43 @@ if( NO_PIXHAWK )
   message( NOTICE "\tFREYJA: User-requested ignore apm_handler package. Please ensure alternative means of communications!\n" )
 else()
 
-find_package(catkin REQUIRED COMPONENTS
-  freyja_msgs
-  geometry_msgs
-  roscpp
-  std_msgs
-  tf
-  mavros
-)
+  find_package(ament_cmake REQUIRED)
+  find_package( rclcpp REQUIRED )
+  find_package( std_msgs REQUIRED )
+  find_package( geometry_msgs REQUIRED )
+  find_package( freyja_msgs REQUIRED )
+  find_package( sensor_msgs REQUIRED )
+  find_package( nav_msgs REQUIRED ) 
+  find_package( std_srvs REQUIRED ) 
+  find_package( tf2 REQUIRED )
+  find_package( tf2_ros REQUIRED )
+  find_package( tf2_geometry_msgs REQUIRED )
+  find_package( mavros_msgs REQUIRED )
+  include_directories( include )
 
-catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES apm_handler
-#  CATKIN_DEPENDS freyja_msgs geometry_msgs roscpp std_msgs tf
-#  DEPENDS system_lib
-)
+  ## Declare a C++ executable
+  add_executable(${PROJECT_NAME}_node src/mavros_translate.cpp)
+  target_include_directories( ${PROJECT_NAME}_node PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+  )
+  ament_target_dependencies( ${PROJECT_NAME}_node 
+    rclcpp
+    std_msgs
+    freyja_msgs
+    geometry_msgs
+    std_srvs
+    nav_msgs
+    tf2
+    tf2_ros
+    tf2_geometry_msgs
+    mavros_msgs
+  )
 
-
-## Specify additional locations of header files
-## Your package locations should be listed before other locations
-include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
-)
-
-## Declare a C++ executable
-
-add_executable(${PROJECT_NAME}_node src/mavros_translate.cpp)
-add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_node
-   ${catkin_LIBRARIES}
- )
+  install(TARGETS
+    apm_handler_node
+    DESTINATION lib/apm_handler
+  )
 
 endif() # NO_PIXHAWK
+ament_package()

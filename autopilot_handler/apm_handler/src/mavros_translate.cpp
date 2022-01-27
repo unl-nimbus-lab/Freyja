@@ -8,19 +8,21 @@
   -- aj / Nov 10, 2018.
 */
 
-
 #include <iostream>
-#include <ros/ros.h>
-#include <mavros_msgs/AttitudeTarget.h>
-#include <mavros_msgs/State.h>
-#include <mavros_msgs/RCIn.h>
 
-#include <tf/tf.h>
-#include <geometry_msgs/Quaternion.h>
+#include "rclcpp/rclcpp.hpp"
+#include "mavros_msgs/msg/attitude_target.hpp"
+#include "mavros_msgs/msg/state.hpp"
+#include "mavros_msgs/msg/rc_in.hpp"
 
-#include <std_srvs/SetBool.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/impl/utils.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include "geometry_msgs/msg/quaternion.hpp"
 
-#include <freyja_msgs/CtrlCommand.h>
+#include "std_srvs/srv/set_bool.hpp"
+
+#include "freyja_msgs/msg/ctrl_command.hpp"
 
 #define PITCH_MAX 0.785398
 #define PITCH_MIN -0.785398
@@ -32,28 +34,80 @@
 #define ROS_NODE_NAME "mavros_translator"
 
 double THRUST_MAX = 1.0;
-double THRUST_MIN = 0.02;
+double THRUST_MIN = -1.0; //0.02;
 double THRUST_SCALER = 200.0;
 
-typedef mavros_msgs::AttitudeTarget AttiTarget;
-typedef freyja_msgs::CtrlCommand::ConstPtr CtrlInput;
+typedef mavros_msgs::msg::AttitudeTarget AttiTarget;
+typedef freyja_msgs::msg::CtrlCommand    CtrlCommand;
+typedef mavros_msgs::msg::State          MavState;
+typedef mavros_msgs::msg::RCIn           RCInput;
+typedef std_srvs::srv::SetBool		 BoolServ;
+using std::placeholders::_1;
+using std::placeholders::_2;
 
 uint8_t ignore_rates = AttiTarget::IGNORE_ROLL_RATE |
-                        AttiTarget::IGNORE_PITCH_RATE; // |
+                       AttiTarget::IGNORE_PITCH_RATE; // |
                         //AttiTarget::IGNORE_YAW_RATE;
-void sendToMavros( const double&, const double&, const double&, const double& );
-void anglesToDouble( double &tgt_r, double &tgt_p, double &tgt_y )
+
+
+class MavrosHandler : public rclcpp::Node
 {
-  tgt_r = tgt_r / ROLL_MAX;
-  tgt_p = tgt_p / PITCH_MAX;
-  tgt_y = tgt_y / YAW_MAX;
+  bool vehicle_armed_;
+  bool in_computer_mode_;
+
+  public:
+    MavrosHandler();
+
+    rclcpp::Publisher<AttiTarget>::SharedPtr atti_pub_;
+
+    rclcpp::Subscription<CtrlCommand>::SharedPtr ctrlCmd_sub_;
+    void rpytCommandCallback( const CtrlCommand::ConstSharedPtr );
+
+    rclcpp::Subscription<MavState>::SharedPtr mavState_sub_;
+    void mavrosStateCallback( const MavState::ConstSharedPtr );
+
+    rclcpp::Subscription<RCInput>::SharedPtr rcInput_sub_;
+    void mavrosRCCallback( const RCInput::ConstSharedPtr );
+
+    rclcpp::Client<BoolServ>::SharedPtr map_lock_;
+    rclcpp::Client<BoolServ>::SharedPtr bias_comp_;
+
+    void sendToMavros( const double&, const double&, const double&, const double& );
+    inline void anglesToDouble( double &tgt_r, double &tgt_p, double &tgt_y )
+    {
+      tgt_r = tgt_r / ROLL_MAX;
+      tgt_p = tgt_p / PITCH_MAX;
+      tgt_y = tgt_y / YAW_MAX;    
+    }
+
+    inline void thrustToDouble( double &t )
+    {
+      t /= THRUST_SCALER;
+    }
+};
+
+MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
+{
+  auto qos = rclcpp::QoS( rclcpp::KeepLast(1) ).best_effort().durability_volatile();
+  vehicle_armed_ = false;
+  in_computer_mode_ = false;
+  declare_parameter<double>( "thrust_scaler", 200.0 );
+  get_parameter( "thrust_scaler", THRUST_SCALER );
+
+  ctrlCmd_sub_ = create_subscription <CtrlCommand> ( "rpyt_command", 1,
+                          std::bind( &MavrosHandler::rpytCommandCallback, this, _1 ) );
+  mavState_sub_ = create_subscription <MavState> ( "mavros/state", qos,
+                          std::bind( &MavrosHandler::mavrosStateCallback, this, _1 ) );
+  rcInput_sub_ = create_subscription <RCInput> ( "mavros/rc/in", 1, 
+                          std::bind( &MavrosHandler::mavrosRCCallback, this, _1 ) );
+  
+  map_lock_ = create_client <BoolServ> ("lock_arming_mapframe" );
+  bias_comp_ = create_client <BoolServ> ( "set_auto_biascomp" );
+
+  atti_pub_ = create_publisher <AttiTarget> ( "mavros/setpoint_raw/attitude", 1 );
 }
 
-inline void thrustToDouble( double &t )
-{
-  t /= THRUST_SCALER;
-}
-void rpytCommandCallback( const CtrlInput &msg )
+void MavrosHandler::rpytCommandCallback( const CtrlCommand::ConstSharedPtr msg )
 {
   /*
   The output from the controller is target roll, pitch and yaw/yawrate values,
@@ -81,61 +135,60 @@ void rpytCommandCallback( const CtrlInput &msg )
   sendToMavros( tgt_pitch, tgt_roll, tgt_yawrate, tgt_thrust );
 }
 
-ros::Publisher atti_pub;
-void sendToMavros( const double &p, const double &r, const double &y, const double &t )
+void MavrosHandler::sendToMavros( const double &p, const double &r, const double &y, const double &t )
 {
-  geometry_msgs::Quaternion tgt_q;
-  tgt_q = tf::createQuaternionMsgFromRollPitchYaw( r, p, y );
+  tf2::Quaternion tgt_q;
+  tgt_q.setRPY( r, p, y );
   
-  AttiTarget atti_tgt;
+  static AttiTarget atti_tgt;
   atti_tgt.type_mask = ignore_rates;
-  atti_tgt.orientation = tgt_q;
+  atti_tgt.orientation = tf2::toMsg( tgt_q );
   atti_tgt.thrust = t;
   atti_tgt.body_rate.z = -y;
-  atti_tgt.header.stamp = ros::Time::now();
+  atti_tgt.header.stamp = now();
     
-  atti_pub.publish( atti_tgt );
+  atti_pub_ -> publish( atti_tgt );
 }
 
-ros::ServiceClient map_lock;
-ros::ServiceClient bias_comp;
-bool vehicle_armed_ = false;
-bool in_comp_mode_ = false;
-void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
+
+void MavrosHandler::mavrosStateCallback( const MavState::ConstSharedPtr msg )
 {
   /* call map lock/unlock service when arming/disarming */
-  std_srvs::SetBool lockreq;
+  RCLCPP_INFO( get_logger(), "state cb" );
+
+  auto lockreq = std::make_shared<BoolServ::Request> ();
   if( msg->armed == true && !vehicle_armed_ )
   {
     vehicle_armed_ = true;
-    lockreq.request.data = true;
-    map_lock.call( lockreq );
+    lockreq -> data = true;
+    map_lock_ -> async_send_request( lockreq );
+    RCLCPP_INFO( get_logger(), "Armed" );
   }
   else if( msg->armed == false && vehicle_armed_ )
   {
     vehicle_armed_ = false;
-    lockreq.request.data = false;
-    map_lock.call( lockreq );
+    lockreq -> data = false;
+    map_lock_ -> async_send_request( lockreq );
   }
   
   /* call bias compensation service when switching in/out of computer */
-  std_srvs::SetBool biasreq;
-  if( msg->mode == "CMODE(25)" && !in_comp_mode_ )
+  BoolServ::Request::SharedPtr biasreq;
+  if( msg->mode == "CMODE(25)" && !in_computer_mode_ )
   {
-    in_comp_mode_ = true;
-    biasreq.request.data = true;
-    bias_comp.call( biasreq );
+    in_computer_mode_ = true;
+    biasreq -> data = true;
+    bias_comp_ -> async_send_request( biasreq );
   }
-  else if( msg->mode != "CMODE(25)" && in_comp_mode_ )
+  else if( msg->mode != "CMODE(25)" && in_computer_mode_ )
   {
-    in_comp_mode_ = false;
-    biasreq.request.data = false;
-    bias_comp.call( biasreq );
+    in_computer_mode_ = false;
+    biasreq -> data = false;
+    bias_comp_ -> async_send_request( biasreq );
   }
 }
 
 
-void rcdataCallback( const mavros_msgs::RCIn::ConstPtr &msg )
+void MavrosHandler::mavrosRCCallback( const RCInput::ConstSharedPtr msg )
 {
   /*  !!NOTE: mavros can publish a zero length array if no rc.
     Check array length first, or wrap in try-catch */
@@ -161,27 +214,9 @@ void rcdataCallback( const mavros_msgs::RCIn::ConstPtr &msg )
 
 int main( int argc, char **argv )
 {
-  ros::init( argc, argv, ROS_NODE_NAME );
-  ros::NodeHandle nh, priv_nh("~");
-  
-  /* Load parameters */
-  priv_nh.param( "thrust_scaler", THRUST_SCALER, double(200.0) );
-  priv_nh.param( "min_thrust_clip", THRUST_MIN, double(0.04) );
-  priv_nh.param( "max_thrust_clip", THRUST_MAX, double(1.0) );
-  
-  atti_pub = nh.advertise <AttiTarget>
-                            ( "/mavros/setpoint_raw/attitude", 1, true );
-  ros::Subscriber rpyt_sub = nh.subscribe
-                            ( "/rpyt_command", 1, rpytCommandCallback );
-                            
-  ros::Subscriber mavstate_sub = nh.subscribe
-                            ( "/mavros/state", 1, mavrosStateCallback );
-  ros::Subscriber mavrc_sub = nh.subscribe
-                            ( "/mavros/rc/in", 1, rcdataCallback );
+  rclcpp::init( argc, argv );
+  rclcpp::spin( std::make_shared<MavrosHandler>() );
+  rclcpp::shutdown();
 
-  map_lock = nh.serviceClient<std_srvs::SetBool>("/lock_arming_mapframe");
-  bias_comp = nh.serviceClient<std_srvs::SetBool>( "/set_bias_compensation");
-  
-  ros::MultiThreadedSpinner(2).spin();
   return 0;
 }
