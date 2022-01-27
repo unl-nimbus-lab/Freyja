@@ -38,6 +38,7 @@ typedef std_srvs::srv::SetBool BoolServ;
 typedef freyja_msgs::msg::CurrentState CurrentState;
 
 using std::placeholders::_1;
+using std::placeholders::_2;
 
 #define DEG2RAD(D) ((D)*3.1415326/180.0)
 #define F_PI 3.14153
@@ -112,7 +113,7 @@ class StateManager: public rclcpp::Node
     void mocapCallback( const TFStamped::ConstSharedPtr ) __attribute__((hot));
 
     rclcpp::TimerBase::SharedPtr tf_timer_;
-    void timerTfCallback();
+    void timerTfCallback() __attribute__((hot));
 
     // /* Callback handler for asctec_onboard_data */
     // rclcpp::Subscription asctec_data_sub_;
@@ -123,16 +124,12 @@ class StateManager: public rclcpp::Node
     // void cameraUpdatesCallback( const CameraOdom::ConstSharedPtr & );
     
     /* Callback handlers for mavros data */
-    // rclcpp::Subscription<sensor_msgs::msg::NavSatFix> mavros_gpsraw_sub_;
-    // rclcpp::Subscription mavros_vel_sub_;
-    // rclcpp::Subscription <std_msgs::msg::Float64> compass_sub_;
-    // rclcpp::Subscription <nav_msgs::msg::Odometry> mavros_gpsodom_sub_;
-    // rclcpp::Subscription <geometry_msgs::msg::Vector3> mavros_rtk_sub_;
-    // void mavrosGpsOdomCallback( const nav_msgs::msg::Odometry::ConstSharedPtr );
-    // void mavrosCompassCallback( const std_msgs::msg::Float64::ConstSharedPtr );
-    // void mavrosRtkBaselineCallback( const geometry_msgs::msg::Vector3::ConstSharedPtr );
-    
-    // void mavrosGpsRawCallback( const sensor_msgs::msg::NavSatFix::ConstSharedPtr );
+    rclcpp::Subscription <std_msgs::msg::Float64>::SharedPtr compass_sub_;
+    rclcpp::Subscription <nav_msgs::msg::Odometry>::SharedPtr mavros_gpsodom_sub_;
+    rclcpp::Subscription <geometry_msgs::msg::Vector3>::SharedPtr mavros_rtk_sub_;
+    void mavrosGpsOdomCallback( const nav_msgs::msg::Odometry::ConstSharedPtr );
+    void mavrosCompassCallback( const std_msgs::msg::Float64::ConstSharedPtr );
+    void mavrosRtkBaselineCallback( const geometry_msgs::msg::Vector3::ConstSharedPtr );
     
     /* handlers for locking map frame origins */
     inline void lockArmingGps( bool _lock = true )
@@ -148,8 +145,9 @@ class StateManager: public rclcpp::Node
       map_rtk_pd_ = _lock? rtk_baseoffset_pd_ : 0.0;
     }
     
-    // rclcpp::ServiceServer maplock_srv_;
-    // bool maplockArmingHandler( const BoolServ::Request::SharedPtr, const BoolServ::Response::SharedPtr );
+    rclcpp::Service<BoolServ>::SharedPtr maplock_srv_;
+    void maplockArmingHandler( const BoolServ::Request::SharedPtr,
+                               const BoolServ::Response::SharedPtr );
 
     
     /* Publisher for state information */

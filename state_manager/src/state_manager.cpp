@@ -4,7 +4,6 @@
 
 #define rclcpp_NODE_NAME "state_manager"
 
-
 StateManager::StateManager() : Node( rclcpp_NODE_NAME )
 {
   state_vector_.resize( STATE_VECTOR_LEN );
@@ -12,7 +11,7 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
   /* find out what the source of state information is:
       > "vicon" for a motion capture system with ENU frame
       > "asctec" for Ascending Tech autopilots (see corresponding handler)
-      > "apm" for ardupilot (uses mavrclcpp, see corresponding handler)
+      > "apm" for ardupilot (uses mavros, see corresponding handler)
       > "onboard_camera" for a downward-facing camera (pose+velocity)
   */ 
   
@@ -31,8 +30,8 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
     initTfManager();
   // else if( state_source_ == "asctec" )
   //   initAsctecManager();
-  // else if (state_source_ == "apm" )
-  //   initPixhawkManager();
+  else if (state_source_ == "apm" )
+     initPixhawkManager();
   // else if( state_source_ == "onboard_camera" )
   //   initCameraManager();
 
@@ -127,21 +126,22 @@ void StateManager::initTfManager()
 //                                 std::bind(&StateManager::asctecDataCallback, this, _1) );
 // }
 
-// void StateManager::initPixhawkManager()
-// {
-//   have_arming_origin_ = false;
-//   mavrclcpp_gpsraw_sub_ = create_subscription( "/mavrclcpp/global_position/global", 1,
-//                                 std::bind(&StateManager::mavrclcppGpsRawCallback, this, _1 );
-//   mavrclcpp_gpsodom_sub_ = create_subscription( "/mavrclcpp/global_position/local", 1,
-//                                 std::bind(&StateManager::mavrclcppGpsOdomCallback, this, _1 );
-//   mavrclcpp_rtk_sub_ = create_subscription( "/ublox_f9p_rtkbaseline", 1,
-//                                 std::bind(&StateManager::mavrclcppRtkBaselineCallback, this, _1 );
-//   compass_sub_ = create_subscription( "/mavrclcpp/global_position/compass_hdg", 1, 
-// 				                std::bind(&StateManager::mavrclcppCompassCallback, this, _1 );
+void StateManager::initPixhawkManager()
+{
+  have_arming_origin_ = false;
+  // mavros_gpsraw_sub_ = create_subscription( "/mavros/global_position/global", 1,
+  //                               std::bind(&StateManager::mavrosGpsRawCallback, this, _1 );
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(5)).best_effort().durability_volatile();
+  mavros_gpsodom_sub_ = create_subscription<nav_msgs::msg::Odometry> ( "/mavros/global_position/local", qos,
+                                std::bind( &StateManager::mavrosGpsOdomCallback, this, _1 ) );
+  mavros_rtk_sub_ = create_subscription<geometry_msgs::msg::Vector3> ( "ublox_f9p_rtkbaseline", 1,
+                                std::bind( &StateManager::mavrosRtkBaselineCallback, this, _1 ) );
+  compass_sub_ = create_subscription<std_msgs::msg::Float64> ( "mavros/global_position/compass_hdg", qos, 
+				                        std::bind( &StateManager::mavrosCompassCallback, this, _1 ) );
 				                
-//   maplock_srv_ = nh_.advertiseService( "/lock_arming_mapframe", 
-//                         std::bind(&StateManager::maplockArmingHandler, this );
-// }
+  maplock_srv_ = create_service <BoolServ> ( "lock_arming_mapframe", 
+                        std::bind(&StateManager::maplockArmingHandler, this, _1, _2 ) );
+}
 
 // void StateManager::initCameraManager()
 // {
