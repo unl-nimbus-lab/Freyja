@@ -133,6 +133,7 @@ void LQRController::biasEnableServer( const BoolServ::Request::SharedPtr rq,
   {
     RCLCPP_WARN( get_logger(), "LQR: Bias compensation remains off throughout." );
     rp -> success = false;       // service unsuccessful
+    return;
   }
   
   bias_compensation_req_ = rq -> data;
