@@ -1,39 +1,27 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>waypoint_manager</name>
-  <version>0.0.0</version>
-  <description>Waypoint manager package</description>
+  <version>2.0.0</version>
+  <description>Waypoint Manager package</description>
 
   <maintainer email="ajshank@noreply.users.github.com">ajshank</maintainer>
   <author email="ajshank@noreply.users.github.com">ajshank</author>
   <maintainer email="hildebrandt.carl@gmail.com">hildebrandt-carl</maintainer>
   <author email="hildebrandt.carl@gmail.com">hildebrandt-carl</author>
-  
-  
   <license>GPLv3</license>
 
-
-  <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>freyja_msgs</build_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>message_generation</build_depend>
-  <build_depend>roscpp</build_depend>
-  <build_depend>std_msgs</build_depend>
-  <build_depend>cmake_modules</build_depend>
-  <build_export_depend>freyja_msgs</build_export_depend>
-  <build_export_depend>geometry_msgs</build_export_depend>
-  <build_export_depend>roscpp</build_export_depend>
-  <build_export_depend>std_msgs</build_export_depend>
-  <exec_depend>freyja_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>roscpp</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>cmake_modules</exec_depend>
-
-
-  <!-- The export tag contains other, unspecified, tags -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>freyja_msgs</depend>
+  
+  <build_depend>Eigen3</build_depend>
+  
   <export>
-    <!-- Other tools can request additional information be placed here -->
-
+    <build_type>ament_cmake</build_type>
   </export>
+
 </package>

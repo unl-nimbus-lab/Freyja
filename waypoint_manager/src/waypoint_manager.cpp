@@ -25,18 +25,19 @@ Two modes are supported for waypoints: TIME (0) and SPEED (1).
 */
 
 #include <iostream>
+#include <chrono>
 
-#include <ros/ros.h>
-#include <std_msgs/Float32.h>
-#include <std_msgs/Int8.h>
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/float32.hpp"
+#include "std_msgs/msg/int8.hpp"
 
-#include <freyja_msgs/WaypointTarget.h>
-#include <freyja_msgs/CurrentState.h>
-#include <freyja_msgs/ReferenceState.h>
+#include "freyja_msgs/msg/waypoint_target.hpp"
+#include "freyja_msgs/msg/current_state.hpp"
+#include "freyja_msgs/msg/reference_state.hpp"
 
 #include <eigen3/Eigen/Dense>
 
-#define ROS_NODE_NAME "waypoint_manager"
+#define rclcpp_NODE_NAME "waypoint_manager"
 
 #define DEG2RAD(D) ((D)*3.14153/180.0)
 
@@ -46,11 +47,16 @@ typedef Eigen::Matrix<double, 1, 6> PosVelNED;
 typedef Eigen::Matrix<double, 1, 9> PosVelAccNED;
 typedef Eigen::Matrix<double, 3, 3> PosVelAccNED3x3;
 
+typedef freyja_msgs::msg::ReferenceState  ReferenceState;
+typedef freyja_msgs::msg::CurrentState    CurrentState;
+typedef freyja_msgs::msg::WaypointTarget  WaypointTarget;
+
+using std::placeholders::_1;
+
 enum modes{time_mode=0, speed_mode=1};
 
-class TrajectoryGenerator
+class TrajectoryGenerator : public rclcpp::Node
 {
-  ros::NodeHandle nh_, priv_nh_;
   Eigen::Matrix<double, 3, 3> tf_premult_;
   Eigen::Matrix<double, 3, nAxes> albtgm_;
   Eigen::Matrix<double, 3, nAxes> delta_targets_;
@@ -68,8 +74,8 @@ class TrajectoryGenerator
   double traj_alloc_duration_;
   double traj_alloc_speed_;
   Eigen::Matrix<double, 3, 3> tnow_matrix_;
-  ros::Time t_traj_init_;
-  ros::Timer traj_timer_;
+  rclcpp::Time t_traj_init_;
+  
   bool traj_init_;
 
   modes wp_mode_;
@@ -93,35 +99,39 @@ class TrajectoryGenerator
     TrajectoryGenerator();
 
     // requested final state
-    ros::Subscriber waypoint_sub_;
-    void waypointCallback( const freyja_msgs::WaypointTarget::ConstPtr & );
+    rclcpp::Subscription<WaypointTarget>::SharedPtr waypoint_sub_;
+    void waypointCallback( const WaypointTarget::ConstSharedPtr );
     
     // vehicle current state (from state_manager)
-    ros::Subscriber current_state_sub_;
-    void currentStateCallback( const freyja_msgs::CurrentState::ConstPtr & );
+    rclcpp::Subscription<CurrentState>::SharedPtr current_state_sub_;
+    void currentStateCallback( const CurrentState::ConstSharedPtr );
     
-    ros::Publisher traj_ref_pub_;
-    freyja_msgs::ReferenceState traj_ref_;
-    void trajectoryReference( const ros::TimerEvent & );
+    rclcpp::Publisher<ReferenceState>::SharedPtr traj_ref_pub_;
+    ReferenceState traj_ref_;
+    rclcpp::TimerBase::SharedPtr traj_timer_;
+    void trajectoryReference();
     
     void publishHoverReference();
-
 };
 
-TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
+TrajectoryGenerator::TrajectoryGenerator() : rclcpp::Node( rclcpp_NODE_NAME )
 {
   /* Operational constants */
   k_thresh_skipreplan_ = 0.10;       // don't replan if new point within this radius
 
   /* initial location for hover */
-  priv_nh_.param( "init_pn", init_pn_, float(0.0) );
-  priv_nh_.param( "init_pe", init_pe_, float(0.0) );
-  priv_nh_.param( "init_pd", init_pd_, float(-0.75) );
-  priv_nh_.param( "init_yaw", init_yaw_, float(0.0) );
-  init_yaw_ = DEG2RAD( init_yaw_ );
+  declare_parameter<float>( "init_pn", 0.0 );
+  declare_parameter<float>( "init_pe", 0.0 );
+  declare_parameter<float>( "init_pd", -0.75 );
+  declare_parameter<float>( "init_yaw", 0.0 );
+
+  get_parameter( "init_pn", init_pn_ );
+  get_parameter( "init_pe", init_pe_ );
+  get_parameter( "init_pd", init_pd_ );
+  get_parameter( "init_yaw", init_yaw_ );
 
   /* unused argument for trajectory shaping */
-  priv_nh_.param( "term_style", terminal_style_, int(1) );
+  declare_parameter<int>( "term_style", int(1) );
 
   /* used for speed and duration constraints*/
   traj_alloc_duration_ = 10.0;
@@ -136,30 +146,30 @@ TrajectoryGenerator::TrajectoryGenerator() : nh_(), priv_nh_("~")
   current_state_ = Eigen::Matrix<double, 1, 9>::Zero();
   update_premult_matrix( traj_alloc_duration_ );
   
-  /* Subscribers */
-  current_state_sub_ = nh_.subscribe( "/current_state", 1,
-                           &TrajectoryGenerator::currentStateCallback, this );
-  waypoint_sub_ = nh_.subscribe( "/discrete_waypoint_target", 1, 
-                           &TrajectoryGenerator::waypointCallback, this );
+  /* Subscriptions */
+  current_state_sub_ = create_subscription<CurrentState> ( "current_state", 1,
+                           std::bind(&TrajectoryGenerator::currentStateCallback, this, _1) );
+  waypoint_sub_ = create_subscription<WaypointTarget>( "discrete_waypoint_target", 1, 
+                           std::bind(&TrajectoryGenerator::waypointCallback, this, _1) );
 
   /* Publishers */
-  traj_ref_pub_ = nh_.advertise<freyja_msgs::ReferenceState>( "/reference_state", 1, true );
+  traj_ref_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );
 
   /* Fixed-rate trajectory provider. Ensure ~40-50hz. */
   float traj_period = 1.0/50.0;
-  traj_timer_ = nh_.createTimer( ros::Duration(traj_period),
-                            &TrajectoryGenerator::trajectoryReference, this );
+  traj_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(traj_period),
+                            std::bind(&TrajectoryGenerator::trajectoryReference, this) );
 
-  ROS_WARN_STREAM( ros::this_node::getName() << ": Initialized, waiting for waypoint .." );
+  RCLCPP_WARN( get_logger(), "Initialized; waiting for waypoint .." );
 }
 
-void TrajectoryGenerator::currentStateCallback( const freyja_msgs::CurrentState::ConstPtr &msg )
+void TrajectoryGenerator::currentStateCallback( const CurrentState::ConstSharedPtr msg )
 {
   /* make current_state available locally */
   current_state_.head<6>() = Eigen::Map<const PosVelNED>( msg->state_vector.data() );
 }
 
-void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::ConstPtr &msg )
+void TrajectoryGenerator::waypointCallback( const WaypointTarget::ConstSharedPtr msg )
 {
   /*
     WaypointTarget:
@@ -173,22 +183,22 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
   if( msg->waypoint_mode != msg->TIME && msg->waypoint_mode != msg->SPEED )
   {
     // Reject waypoint
-    ROS_WARN_STREAM( ros::this_node::getName() << ": Waypoint mode incorrectly specified. Ignoring!" );
+    RCLCPP_WARN( get_logger(), "Waypoint mode incorrect. Ignoring!" );
     return;
   }
   
-  // guess if provided waypoint mode was "accidental" or wrong
+  // guess if provided waypoint mode was "accidental" or maybe wrong
   if( msg->waypoint_mode == msg->TIME && msg->allocated_time < 0.01 )
   {
-    ROS_WARN_STREAM( ros::this_node::getName() << ": Allocated time too small (possibly zero). Ignoring!" );
-    ROS_WARN_STREAM( ros::this_node::getName() << ": ---- Did you mean to use SPEED mode?" );
+    RCLCPP_WARN( get_logger(), "Allocated time too small (possibly zero). Ignoring!" );
+    RCLCPP_WARN( get_logger(), "---- Did you mean to use SPEED mode?" );
     return;
   }
   
   if( msg->waypoint_mode == msg->SPEED && msg->translational_speed < 0.001 )
   {
-    ROS_WARN_STREAM( ros::this_node::getName() << ": Translational speed too small (possibly zero). Ignoring!" );
-    ROS_WARN_STREAM( ros::this_node::getName() << ": ---- Speed must be positive and greater than 0.001 m/s." );
+    RCLCPP_WARN( get_logger(), "Translational speed too small (possibly zero). Ignoring!" );
+    RCLCPP_WARN( get_logger(), "---- Speed must be positive, and > 0.001 m/s." );
     return;
   }
 
@@ -212,21 +222,20 @@ void TrajectoryGenerator::waypointCallback( const freyja_msgs::WaypointTarget::C
       trigger_replan_time( traj_alloc_duration_ );
       wp_mode_ = time_mode;
     }
-    else // Speed mode 
+    else                                // Speed mode 
     {
       traj_alloc_speed_ = msg->translational_speed;
       trigger_replan_speed( traj_alloc_speed_ );
       wp_mode_ = speed_mode;
     }
     
-    ROS_WARN( "Plan generated!" );
-    t_traj_init_ = ros::Time::now();
-
+    RCLCPP_INFO( get_logger(), "Plan generated!" );
+    t_traj_init_ = now();
   }
   else
   {
     // Reject waypoint because it is not distinct enough
-    ROS_WARN_STREAM( ros::this_node::getName() << ": New WP too close to old WP. Ignoring!" );
+    RCLCPP_WARN( get_logger(), "New WP too close to old WP. Ignoring!" );
   }
 
   // this is only handled once - trajectory is never reinit, only updated.
@@ -283,7 +292,7 @@ inline void TrajectoryGenerator::update_premult_matrix( const double &tf )
 {
   tf_premult_ <<  720.0,      -360.0*tf,        60.0*tf*tf,
                  -360.0*tf,    168.0*tf*tf,    -24.0*tf*tf*tf,
-                   60.0*tf*tf, -24.0*tf*tf*tf,   3.0*tf*tf*tf*tf;
+                  60.0*tf*tf, -24.0*tf*tf*tf,   3.0*tf*tf*tf*tf;
                  
   // necessarily update alpha, beta and gamma as well
   update_albtgm( tf );
@@ -297,14 +306,14 @@ inline void TrajectoryGenerator::update_albtgm( const double &dt )
   albtgm_ = 1.0/std::pow(dt,5) * tf_premult_ * delta_targets_;
 }
 
-void TrajectoryGenerator::trajectoryReference( const ros::TimerEvent &event )
+void TrajectoryGenerator::trajectoryReference( )
 {
   /* This is the trajectory generator - gets called at a fixed rate.
   This must keep track of current time since "go". If go-signal has
   not been recorded yet, we must stay at initial position.
   */
     
-  float tnow = (ros::Time::now() - t_traj_init_).toSec();
+  float tnow = (now() - t_traj_init_).seconds();
   
   static PosVelAccNED3x3 tref; // [pn, pe, pd;; vn, ve, vd;; an, ae, ad]
 
@@ -365,9 +374,9 @@ void TrajectoryGenerator::trajectoryReference( const ros::TimerEvent &event )
   traj_ref_.ad = tref(2,2);
 
   traj_ref_.yaw = yaw_target;     // nothing special for yaw
-  traj_ref_.header.stamp = ros::Time::now();
+  traj_ref_.header.stamp = now();
 
-  traj_ref_pub_.publish( traj_ref_ );
+  traj_ref_pub_ -> publish( traj_ref_ );
 }
 
 void TrajectoryGenerator::publishHoverReference()
@@ -397,20 +406,18 @@ void TrajectoryGenerator::publishHoverReference()
   traj_ref_.ae = 0.0;
   traj_ref_.ad = 0.0;
 
-  traj_ref_.header.stamp = ros::Time::now();
-  traj_ref_pub_.publish( traj_ref_ );
+  traj_ref_.header.stamp = now();
+  traj_ref_pub_ -> publish( traj_ref_ );
 }
 
 int main( int argc, char** argv )
 {
-  ros::init( argc, argv, ROS_NODE_NAME );
-  TrajectoryGenerator tgen;
-  
-  ros::spin();
+  rclcpp::init( argc, argv );
+  rclcpp::spin( std::make_shared<TrajectoryGenerator>() );
+  rclcpp::shutdown();
   return 0;
 }
 
 
 //TODO: Add status waypoint_done, protect trajectory-gen with mutex
-//TODO: rename topic to "discrete_waypoint_target" to prevent abuse
 //TODO: change to enum class, and start enumerating at 1
