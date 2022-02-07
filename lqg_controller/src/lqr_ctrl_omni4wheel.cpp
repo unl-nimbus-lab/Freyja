@@ -20,11 +20,7 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   float mass_default = 0.85;
   
   declare_parameter<int>( "controller_rate", controller_rate_default );
-  declare_parameter<float>( "total_mass", mass_default );
-  declare_parameter<bool>( "use_stricter_gains", false );
   declare_parameter<bool>( "enable_flatness_ff", false );
-  declare_parameter<bool>( "mass_correction", false );
-  declare_parameter<bool>( "mass_estimation", true );
   declare_parameter<std::string>( "bias_compensation", "auto" );
   declare_parameter<std::string>( "controller_type", "order-2" );
 
@@ -33,8 +29,6 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   declare_parameter<double>( "wheel_radius", 0.10 );
   
   get_parameter( "controller_rate", controller_rate_ );
-  get_parameter( "total_mass", total_mass_ );
-  get_parameter( "use_stricter_gains", use_stricter_gains_ );
 
   
   /* Associate a subscriber for the current vehicle state */
@@ -74,21 +68,6 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   bias_compensation_off_ = (_bcomp == "off")? true : false;   // always off
   
   f_biases_ << 0.0, 0.0, 0.0;
-  
-  /* Differential flatness feed-forward accelerations */
-  get_parameter( "enable_flatness_ff", enable_flatness_ff_ );
-  reference_ff_ << 0.0, 0.0, 0.0;
-  
-  
-  /* Mass estimation */
-  enable_dyn_mass_correction_ = false;
-  get_parameter( "mass_correction", enable_dyn_mass_correction_ );
-  get_parameter( "mass_estimation", enable_dyn_mass_estimation_ );
-  if( enable_dyn_mass_correction_ )
-  {
-    enable_dyn_mass_estimation_ = true;
-    RCLCPP_WARN( get_logger(), "LQR: Mass correction active at init! This is discouraged." );
-  }
 
 
   /* initialise system, matrices and controller configuration */
@@ -115,51 +94,34 @@ void LQRController::initLqrSystem()
     lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
   */
   get_parameter( "controller_type", controller_type_ );
-  if( controller_type_ == "order-2" )
+  if( controller_type_ == "pos-vel" )
   {
-    lqr_K_ <<   2.4472,   0,        0,        1.0472,   0,        0,
-              0,        2.4472,   0,        0,        1.0472,   0,
-              0,        0,        0.4162,   0,        0,        0.023162;
-  }
-  else if( controller_type_ == "order-1-ff" )
-  {
-    lqr_K_ <<   2.1472,   0,        0,        0,   0,        0,
-              0,        2.1472,   0,        0,        0,   0,
-              0,        0,        1.4162,   0,        0,        0.3;
+    // position, velocity (+ff), and yaw : order-2-ff
+    lqr_K_ << 2.1472,   0,        0,        0.1,     0,        0,
+              0,        2.1472,   0,        0,       0.1,      0,
+              0,        0,        3.4162,   0,       0,        0.12;
     enable_flatness_ff_ = true;
   } 
-  else if( controller_type_ == "order-1-no-ff" )
+  else if( controller_type_ == "vel-only" )
   {
-    lqr_K_ <<   3.4472,   0,        0,        0,   0,        0,
-              0,        3.4472,   0,        0,        0,   0,
-              0,        0,        0.8162,   0,        0,        0.02;
-  }
-  else if( controller_type_ == "order-0-ff" )
-  {
-    lqr_K_ <<   0,   0,        0,        0,   0,        0,
-              0,        0,   0,        0,        0,   0,
-              0,        0,        0.8162,   0,        0,        0;
-   enable_flatness_ff_ = true;
-  }
-  else if( controller_type_ == "order-2-ff" )
-  {
-    lqr_K_ <<  0.8472,   0,        0,        0.872,   0,        0,
-              0,        0.8472,   0,        0,        0.872,    0,
-              0,        0,        1.1162,   0,        0,        0.2;
+    // velocity (+ff), and yaw : order-1-ff
+    lqr_K_ << 0,       0,      0,        0.272,     0,        0,
+              0,       0,      0,        0,         0.272,    0,
+              0,       0,      3.4162,   0,         0,        0.18;
     enable_flatness_ff_ = true;
   }
-  RCLCPP_WARN( get_logger(), "Flatness: %0.3f", float(enable_flatness_ff_) );
-   /* little more aggresive:
-    lqr_Q_ = [..];  (7x7) Q.diag = [1.2, 1.2, 8.2, 0.02, 0.02, 0.1, 1]
-    lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
-  */
-  if( use_stricter_gains_ )
+  else if( controller_type_ == "open-loop" )
   {
-    lqr_K_ << 1.225, 0.0, 0.0, 0.5731, 0.0, 0.0, 
-              0.0, 1.225, 0.0, 0.00, 1.5731, 0.0, 
-              0.0, 0.0, 3.2016, 0.0, 0.0, 2.550;
-    RCLCPP_WARN( get_logger(), "LQR: stricter gains requested!" );
+    // ff only, and yaw (no regulation on position or velocities = risk!)
+    lqr_K_ << 0,      0,      0,        0,     0,        0,
+              0,      0,      0,        0,     0,        0,
+              0,      0,      3.1162,   0,     0,        0.13;
+    enable_flatness_ff_ = true;
   }
+
+  RCLCPP_INFO( get_logger(), "Controller: %s, using flatness: %d", 
+                              controller_type, int(enable_flatness_ff_) );
+
 
   double ch_l, ch_w;
   get_parameter( "wheel_radius", wheel_rad_ );
@@ -167,10 +129,6 @@ void LQRController::initLqrSystem()
   get_parameter( "chassis_width", ch_w );
     
   double chassis_lw = ch_l + ch_w;  
-  wheel_geometry_matrix_ << 1.0,  -1.0, -chassis_lw,
-                            1.0,   1.0,  chassis_lw,
-                            1.0,  -1.0,  chassis_lw,
-                            1.0,   1.0, -chassis_lw;
   wheel_geometry_matrix_ << 1.0,   1.0,  chassis_lw,
                             1.0,  -1.0, -chassis_lw,
                             1.0,   1.0, -chassis_lw,
@@ -184,6 +142,7 @@ void LQRController::biasEnableServer( const BoolServ::Request::SharedPtr rq,
   {
     RCLCPP_WARN( get_logger(), "LQR: Bias compensation remains off throughout." );
     rp -> success = false;       // service unsuccessful
+    return;
   }
   
   bias_compensation_req_ = rq -> data;
@@ -254,8 +213,7 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstSharedPtr m
   reference_state_ << msg->pn, msg->pe, msg->yaw, msg->vn, msg->ve, 0.0;
   reference_state_mutex_.unlock();
   
-  //if( controller_type_ == "order-1-ff" )
-  reference_ff_ << msg->vn, msg->ve, 0.0;    // only NED accelerations
+  reference_ff_ << msg->vn, msg->ve, 0.0;    // feed-forward
   have_reference_update_ = true;
 }
 
@@ -319,10 +277,6 @@ void LQRController::computeFeedback( )
   if( bias_compensation_req_ )
     bias_est_.setControlInput( bias_ctrl_input );
     
-  /* Update the total flying mass if requested */
-  if( enable_dyn_mass_estimation_ )
-    estimateMass( control_input(2), tnow );
-    
   /* Debug information */
   static CTRL_Debug debug_msg;
   debug_msg.header.stamp = tnow;
@@ -342,46 +296,11 @@ void LQRController::computeFeedback( )
 
 void LQRController::estimateMass( const double &c, rclcpp::Time &t )
 {
-  /* Experimental module that estimates the true mass of the system in air.
-    It uses the provided mass and observes the deviation from expected output
-    of the controller - and attributes *all* of that error to an incorrect
-    mass parameter. This is recommended only if mass may be off by ~200-300g.
-    Errors larger than that can induce major second-order oscillations, and are
-    usually better addressed elsewhere in the architecture (or get a better scale).
-  */
-  static float prev_estimated_mass = total_mass_;
-  static std_msgs::msg::Float32 estmass;
-  static rclcpp::Time t_last = now();
-
-  if( (t-t_last).seconds() < 3.0 )
-    return;
-
-  float ctrl_effort = c + 9.81;
-  float estimated_mass = total_mass_*(9.81 - ctrl_effort)/9.81;
-  // basic low-pass filter to prevent wild jitter
-  estimated_mass = (prev_estimated_mass + estimated_mass)/2.0;
   
-  estmass.data = estimated_mass;
-  est_mass_pub_ -> publish( estmass );
-  
-  /* if correction is allowed- clip between min and max */
-  if( enable_dyn_mass_correction_ )
-    total_mass_ = std::min( 2.0f, std::max( 0.8f, estimated_mass ) );
-  
-  // book-keeping
-  t_last = t;
-  prev_estimated_mass = estimated_mass;
 }
 
 int main( int argc, char** argv )
 {
-  /*ros::init( argc, argv, ROS_NODE_NAME );
-  BiasEstimator estimator;
-  LQRController lqr( estimator );
-  
-  ros::MultiThreadedSpinner cbspinner(4);
-  cbspinner.spin();
-  */
   rclcpp::init( argc, argv );
   BiasEstimator estimator;
   rclcpp::spin( std::make_shared<LQRController>(estimator) );
