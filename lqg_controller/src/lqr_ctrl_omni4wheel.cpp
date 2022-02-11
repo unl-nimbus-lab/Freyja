@@ -120,7 +120,7 @@ void LQRController::initLqrSystem()
   }
 
   RCLCPP_INFO( get_logger(), "Controller: %s, using flatness: %d", 
-                              controller_type, int(enable_flatness_ff_) );
+                              controller_type_, int(enable_flatness_ff_) );
 
 
   double ch_l, ch_w;
