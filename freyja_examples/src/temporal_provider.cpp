@@ -9,30 +9,69 @@
   
   -- aj / 23rd Nov, 2017.
 */
-#include <cmath>
-#include <ros/ros.h>
-#include <std_msgs/UInt8.h>
-#include <freyja_msgs/ReferenceState.h>
+
+#include "temporal_provider.h"
 
 #define ROS_NODE_NAME "trajectory_provider"
-typedef freyja_msgs::ReferenceState TrajRef;
+#define UPDATE_RATE 50														// update rate of the trajectory (Hz)
 
-#define DEG2RAD(D) ((D)*3.1415326/180.0)
-
-// global decl for "start time". This can be reset by a callback
-ros::Time init_time;
-
-void timeResetCallback( const std_msgs::UInt8::ConstPtr &msg )
+Temporal_Traj::Temporal_Traj() : Node( ROS_NODE_NAME )
 {
-  if( msg -> data == 1 )
-  {
-    init_time = ros::Time::now();
-    ROS_WARN( "%s: Time reset requested!", ROS_NODE_NAME );
-  }
+	init_time = now();
+
+	declare_parameter<std::string>("traj_type", traj_type);
+	declare_parameter<int>("agg_level", agg_level);
+
+	get_parameter("traj_type", traj_type);
+	get_parameter("agg_level", agg_level);
+
+	time_reset_sub_ = create_subscription<std_msgs::msg::UInt8>(
+	"/reset_trajectory_time", 1, std::bind(&Temporal_Traj::timer_reset_cb, this, _1));
+
+	traj_pub_ = create_publisher<TrajRef>("/reference_state", 1);
+
+	traj_update_timer_ = create_wall_timer(
+	20ms, std::bind(&Temporal_Traj::traj_update_cb, this));
 }
 
-// HOVER AT A POINT 
-TrajRef getHoverReference( const ros::Duration &cur_time )
+void Temporal_Traj::timer_reset_cb( std_msgs::msg::UInt8::SharedPtr msg )
+{
+	if (msg->data == 1)
+	{
+		init_time = now();
+		RCLCPP_WARN(get_logger(), "%s: Time reset requested!", ROS_NODE_NAME);
+	}
+}
+
+void Temporal_Traj::traj_update_cb()
+{
+	get_parameter("traj_type", traj_type);
+
+	if (traj_type == "hover")
+	{
+		ref_state = Temporal_Traj::getHoverReference(now() - init_time);
+		RCLCPP_INFO(get_logger(), "Publishing Hover Reference States");
+	}
+	else if (traj_type == "circle")
+	{
+		ref_state = Temporal_Traj::getCircleReference(now() - init_time, agg_level);
+		RCLCPP_INFO(get_logger(), "Publishing Circle Reference States");
+	}
+	else if (traj_type == "lemiscate")
+	{
+		ref_state = Temporal_Traj::getLemiscateReference(now() - init_time, agg_level);
+		RCLCPP_INFO(get_logger(), "Publishing Lemiscate Reference States");
+	}
+	else
+	{
+		RCLCPP_ERROR(get_logger(), "Invalid trajectory parameters given.");
+	}
+
+	traj_pub_->publish(ref_state);
+}
+
+// HOVER AT A POINT
+TrajRef Temporal_Traj::getHoverReference( rclcpp::Duration cur_time )
 {
   TrajRef ref_state;
   ref_state.pn = 0.0;
@@ -45,19 +84,25 @@ TrajRef getHoverReference( const ros::Duration &cur_time )
   ref_state.an = 0.0;
   ref_state.ae = 0.0;
   ref_state.ad = 0.0;
-  ref_state.header.stamp = ros::Time::now();
+  ref_state.header.stamp = now();
   return ref_state;
 }
 
-// CIRCLE: pn = A*sin(wt), pe = A*cos(wt), vn = A*w*cos(wt) ..
-TrajRef getCircleReference( const ros::Duration &cur_time, const int agg_level)
+/** CIRCLE:
+* pn = A*sin(wt)
+* pe = A*cos(wt)
+* vn = A*w*cos(wt)
+* vn = -A*w*sin(wt)
+*/
+TrajRef Temporal_Traj::getCircleReference( const rclcpp::Duration cur_time, const int agg_level)
 {
   // A is amplitude (radius); w angular rate such that 2pi/w = (seconds for one rev)
   float A = 0.5;
   float w = 0.5;
 
   // Set A and w based on agg_level
-  switch(agg_level) {
+  switch(agg_level)
+	{
     case 1 :
       break;
     case 2 :
@@ -69,30 +114,31 @@ TrajRef getCircleReference( const ros::Duration &cur_time, const int agg_level)
       w = 3;
       break;
     default :
-      ROS_WARN_STREAM("Circle aggression " << agg_level << " not supported, defaulting to agg_level 1");
-  }
+      RCLCPP_WARN(get_logger(), "Circle aggression %d not supported, defaulting to agg_level 1", agg_level);
+	}
 
-  float t = cur_time.toSec();
+	float t = cur_time.seconds();
 
-  // Create reference state
-  TrajRef ref_state;
-  ref_state.header.stamp = ros::Time::now();
+	// Create reference state
+	TrajRef ref_state;
+	ref_state.header.stamp = now();
 
-  ref_state.pn = A*std::sin( w*t );
-  ref_state.pe = A*std::cos( w*t );
-  ref_state.pd = -1.0;
-  
-  ref_state.vn = A*w*std::cos( w*t );
-  ref_state.ve = -A*w*std::sin( w*t );
-  ref_state.vd = 0.0;
+	ref_state.pn = A*std::sin( w*t );
+	ref_state.pe = A*std::cos( w*t );
+	ref_state.pd = -4.0;
 
-  ref_state.yaw = 0.0;
+	ref_state.vn = A*w*std::cos( w*t );
+	ref_state.ve = -A*w*std::sin( w*t );
+	ref_state.vd = 0.0;
 
-  // set an, ae, ad to second derivatives if needed for FF..
-  return ref_state;
+	ref_state.yaw = 0.0;
+
+	// set an, ae, ad to second derivatives if needed for FF..
+	return ref_state;
+
 }
 
-TrajRef getDefaultReference( const ros::Duration &cur_time )
+TrajRef Temporal_Traj::getDefaultReference( rclcpp::Duration cur_time )
 {
   TrajRef ref_state;
   ref_state.pn = 0.5;
@@ -105,48 +151,66 @@ TrajRef getDefaultReference( const ros::Duration &cur_time )
   ref_state.an = 0.0;
   ref_state.ae = 0.0;
   ref_state.ad = 0.0;
-  ref_state.header.stamp = ros::Time::now();
-  return ref_state;
+  ref_state.header.stamp = now();
+
+	return ref_state;
 }
 
-int main( int argc, char** argv )
+/** LEMISCATE OF BERNOULLI / Figure-8:
+* pn = A*cos(wt)/(1+sin^2(wt))
+* pe = A*sin(wt*)cos(wt)/(1+sin^2(wt))
+* vn = {A*w*sin(wt)(sin^2(wt)−3)}/{(sin^2(wt)+1)^2}
+* ve = {2*A*w*(3*cos(2*wt)−1)}/{(cos(2*wt)−3)^2}
+*/
+TrajRef Temporal_Traj::getLemiscateReference( rclcpp::Duration cur_time, const int agg_level)
 {
-  ros::init( argc, argv, ROS_NODE_NAME );
-  ros::NodeHandle nh, priv_nh("~");
+  // A is amplitude (radius); w angular rate such that 2pi/w = (seconds for one rev)
+  float A = 0.5;
+  float w = 0.5;
 
-  /* Publisher for trajectory */
-  ros::Publisher traj_pub;
-  traj_pub = nh.advertise <TrajRef> ( "/reference_state", 1, true );
-  
-  /* Create subscriber for resetting time -- restart the trajectory */
-  ros::Subscriber time_reset_sub;
-  time_reset_sub = nh.subscribe( "/reset_trajectory_time", 1, timeResetCallback );
-  
-  std::string traj_type;
-  priv_nh.param( "example_traj_type", traj_type, std::string("hover") );
+  // Set A and w based on agg_level
+  switch(agg_level)
+	{
+    case 1 :
+      break;
+    case 2 :
+      A = 0.5;
+      w = 1;
+      break;
+    case 3 :
+      A = 1;
+      w = 3;
+      break;
+    default :
+      RCLCPP_WARN(get_logger(), "Lemiscate aggression %d not supported, defaulting to agg_level 1", agg_level);
+	}
 
-  /* How fast should a trajectory update be made? */
-  ros::Rate update_rate(50);
-  init_time = ros::Time::now();
+	float t = cur_time.seconds();
 
-  while( ros::ok() )
-  {
-    TrajRef ref_state;
-    if( traj_type == "circle1" )
-      ref_state = getCircleReference( ros::Time::now() - init_time, 1 );
-    else if( traj_type == "circle2" )
-      ref_state = getCircleReference( ros::Time::now() - init_time, 2 );
-    else if( traj_type == "circle3" )
-      ref_state = getCircleReference( ros::Time::now() - init_time, 3 );
-    else if( traj_type == "hover" )
-      ref_state = getHoverReference( ros::Time::now() - init_time );
-    else
-      ref_state = getDefaultReference( ros::Time::now() - init_time );
-    traj_pub.publish( ref_state );
+	// Create reference state
+	TrajRef ref_state;
+	ref_state.header.stamp = now();
 
-    ros::spinOnce();
-    update_rate.sleep();
-  }
+	ref_state.pn = A * std::cos(w*t)/(1+pow(std::sin(w*t),2));
+	ref_state.pe = A * std::sin(w*t)*std::cos(w*t)/(1+pow(std::sin(w*t),2));
+	ref_state.pd = -4.0;
 
+	ref_state.vn = ( A * w * std::sin(w*t)*( pow(std::sin(w*t),2)-3)) / ( pow( pow( std::sin(w*t),2)+1 ,2));
+	ref_state.ve = ( 2 * A * w * (3*std::cos(2*w*t)-1)) / ( pow( std::cos(2*w*t)-3 , 2) );
+	ref_state.vd = 0.0;
+
+	ref_state.yaw = 0.0;
+
+	// set an, ae, ad to second derivatives if needed for FF..
+	return ref_state;
+
+}
+
+int main(int argc, char * argv[])
+{
+	rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<Temporal_Traj>());
+  rclcpp::shutdown();
   return 0;
 }
+

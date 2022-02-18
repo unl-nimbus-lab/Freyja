@@ -1,34 +1,20 @@
 <?xml version="1.0"?>
-<package>
+<package format="3">
   <name>freyja_examples</name>
   <version>0.0.0</version>
-  <description>The examples package showing use cases</description>
-
-  <!-- One maintainer tag required, multiple allowed, one person per tag --> 
-  <!-- Example:  -->
-  <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
-  <maintainer email="aj@todo.todo">aj</maintainer>
-
+  <description>ROS2 Trajectory Examples</description>
+  <maintainer email="hw527@cam.ac.uk">Peter Woo</maintainer>
   <license>GPLv3</license>
 
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>message_generation</build_depend>
-  <build_depend>roscpp</build_depend>
-  <build_depend>freyja_msgs</build_depend>
-  <build_depend>std_msgs</build_depend>
-  
-  <run_depend>geometry_msgs</run_depend>
-  <run_depend>message_runtime</run_depend>
-  <run_depend>roscpp</run_depend>
-  <run_depend>std_msgs</run_depend>
-  <run_depend>message_generation</run_depend>
+	<depend>rclcpp</depend>
+	<depend>std_msgs</depend>
+	<depend>std_srvs</depend>
+	<depend>freyja_msgs</depend>
 
-
-  <!-- The export tag contains other, unspecified, tags -->
-  <export>
-    <!-- Other tools can request additional information be placed here -->
-
+	<export>
+    <build_type>ament_cmake</build_type>
   </export>
+
 </package>
