@@ -35,7 +35,10 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   /* Associate a subscriber for the current reference state */
   reference_sub_ = nh_.subscribe( "/reference_state", 1, 
                               &LQRController::trajectoryReferenceCallback, this );
-  
+  /* Associate a subscriber for the current mavros state */
+  mavstate_sub_ = nh_.subscribe( "/mavros/state", 1, 
+                              &LQRController::mavrosStateCallback, this );
+
   /* Service provider for bias compensation */
   bias_enable_serv_ = nh_.advertiseService( "/set_bias_compensation",
                               &LQRController::biasEnableServer, this );
@@ -56,6 +59,10 @@ LQRController::LQRController(BiasEstimator &b) : nh_(),
   have_state_update_ = false;
   have_reference_update_ = false;  
   
+  /* Init state variables */
+  previous_state_ = "";
+  control_mode_ = 0b11111111;
+
   /* Bias compensation parameters */
   std::string _bcomp = "auto";
   priv_nh_.param( "bias_compensation", _bcomp, _bcomp );
@@ -196,6 +203,40 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstPtr &msg )
   have_reference_update_ = true;
 }
 
+void LQRController::mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
+{
+  /* If the control mode has changed */
+  if ( previous_state_ != msg->mode )
+  {
+    /* Save the current control mode */
+    if( msg->mode == "STABILIZE" )
+    {
+      control_mode_ = 0b00000000;
+    }
+    else if( msg->mode == "ACRO" )
+    {
+      control_mode_ = 0b00000001;
+    }
+    else if( msg->mode == "ALT_HOLD" )
+    {
+      control_mode_ = 0b00000010;
+    }
+    else if( msg->mode == "POSITION" )
+    {
+      control_mode_ = 0b00001000;
+    }
+    else if( msg->mode == "CMODE(25)" )
+    {
+      control_mode_ = 0b00011001;
+    }
+    else
+    {
+      control_mode_ = 0b11111111;
+    }
+    previous_state_ = msg->mode;
+  }
+}
+
 __attribute__((optimize("unroll-loops")))
 void LQRController::computeFeedback( const ros::TimerEvent &event )
 {
@@ -255,7 +296,7 @@ void LQRController::computeFeedback( const ros::TimerEvent &event )
   ctrl_cmd.pitch = pitch;
   ctrl_cmd.yaw = yaw;
   ctrl_cmd.thrust = T;
-  ctrl_cmd.ctrl_mode = 0b00001111;
+  ctrl_cmd.ctrl_mode = control_mode_;
   atti_cmd_pub_.publish( ctrl_cmd );
   
 

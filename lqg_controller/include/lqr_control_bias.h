@@ -24,6 +24,8 @@
 #include <freyja_msgs/ControllerDebug.h>
 #include <freyja_msgs/ReferenceState.h>
 
+#include <mavros_msgs/State.h>
+
 #include <eigen3/Eigen/Dense>
 
 #include "bias_estimator.h"
@@ -55,7 +57,8 @@ class LQRController
   
   /* Vehicle properties */
   float total_mass_;
-
+  int8_t control_mode_;
+  std::string previous_state_;
   
   /* Rotation matrices */
   Eigen::Matrix<double, 3, 3> rot_yaw_;
@@ -96,6 +99,9 @@ class LQRController
     
     ros::Subscriber reference_sub_;
     void trajectoryReferenceCallback( const TrajRef::ConstPtr & );
+
+    ros::Subscriber mavstate_sub_;
+    void mavrosStateCallback( const mavros_msgs::State::ConstPtr & );
 
     /* helper function to calculate yaw error */
     static constexpr inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
