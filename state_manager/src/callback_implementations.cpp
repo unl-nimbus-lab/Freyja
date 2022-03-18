@@ -250,6 +250,7 @@ bool StateManager::maplockArmingHandler( BoolServReq& rq, BoolServRsp& rp )
     have_arming_origin_ = false;
     ROS_WARN( "StateManager::Origin cleared, unlocking RTK map-frame!" );
   }
+  return true;
 }
 
 void StateManager::cameraUpdatesCallback( const CameraOdom::ConstPtr &msg )

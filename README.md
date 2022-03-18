@@ -59,9 +59,19 @@ Check out [Freyja's wiki](https://github.com/unl-nimbus-lab/Freyja/wiki) to get 
 ## License, Credits and Usage
 Freyja is developed in the [Nimbus Lab](https://nimbus.unl.edu), with rigorous testing under a multitude of operational scenarios and is used internally for various projects. Generous thanks to members who have tested and reported bugs, issues and feature limitations. The software is public under the GNU GPLv3 license. Please use wisely, and recommend improvements!
 
-If you use Freyja for your work, you can site the ICRA 2021 paper that describes it in full detail:
->```
+If you use Freyja for your work, please cite the [ICRA 2021 paper](https://cse.unl.edu/~carrick/papers/2021-ICRA-FlyingOutdoors-Preprint.pdf) that describes it in full detail:
+
+```BibTeX
+inproceedings{shankar2021freyja,
+  title={Freyja: A full multirotor system for agile \& precise outdoor flights},
+  author={Shankar, Ajay and Elbaum, Sebastian and Detweiler, Carrick},
+  booktitle={2021 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages={217--223},
+  year={2021},
+  organization={IEEE}
+}
+```
+>```bash
 >"Freyja: A Full Multirotor System for Agile & Precise Outdoor Flights",
 >A. Shankar, S. Elbaum, C. Detweiler;
 >IEEE International Conference on Robotics and Automation (ICRA), 2021.
->```

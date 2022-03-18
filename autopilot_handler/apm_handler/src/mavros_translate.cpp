@@ -101,6 +101,7 @@ ros::ServiceClient map_lock;
 ros::ServiceClient bias_comp;
 bool vehicle_armed_ = false;
 bool in_comp_mode_ = false;
+std::string cmode_name_ = "CMODE(25)"; 
 void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
 {
   /* call map lock/unlock service when arming/disarming */
@@ -120,13 +121,13 @@ void mavrosStateCallback( const mavros_msgs::State::ConstPtr &msg )
   
   /* call bias compensation service when switching in/out of computer */
   std_srvs::SetBool biasreq;
-  if( msg->mode == "CMODE(25)" && !in_comp_mode_ )
+  if( msg->mode == cmode_name_ && !in_comp_mode_ )
   {
     in_comp_mode_ = true;
     biasreq.request.data = true;
     bias_comp.call( biasreq );
   }
-  else if( msg->mode != "CMODE(25)" && in_comp_mode_ )
+  else if( msg->mode != cmode_name_ && in_comp_mode_ )
   {
     in_comp_mode_ = false;
     biasreq.request.data = false;
@@ -168,6 +169,7 @@ int main( int argc, char **argv )
   priv_nh.param( "thrust_scaler", THRUST_SCALER, double(200.0) );
   priv_nh.param( "min_thrust_clip", THRUST_MIN, double(0.04) );
   priv_nh.param( "max_thrust_clip", THRUST_MAX, double(1.0) );
+  priv_nh.param( "comp_mode_name", cmode_name_, std::string("CMODE(25)") );
   
   atti_pub = nh.advertise <AttiTarget>
                             ( "/mavros/setpoint_raw/attitude", 1, true );
