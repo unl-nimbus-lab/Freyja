@@ -26,6 +26,8 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   declare_parameter<bool>( "mass_correction", false );
   declare_parameter<bool>( "mass_estimation", true );
   declare_parameter<std::string>( "bias_compensation", "auto" );
+
+  declare_parameter<std::string>( "controller_type", "pos-vel" );
   
   get_parameter( "controller_rate", controller_rate_ );
   get_parameter( "total_mass", total_mass_ );
@@ -107,23 +109,47 @@ void LQRController::initLqrSystem()
     lqr_Q_ = [..];  (7x7) Q.diag = [1, 1, 8, 0.01, 0.01, 0.1, 1]
     lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
   */
-  lqr_K_ << 1.118, 0.0, 0.0, 1.4995, 0.0, 0.0, 0.0,
+  std::string controller_type;
+  get_parameter( "controller_type", controller_type );
+
+  if( controller_type == "pos-vel" )
+  {
+    lqr_K_ << 1.118, 0.0, 0.0, 1.4995, 0.0, 0.0, 0.0,
             0.0, 1.118, 0.0, 0.00, 1.4995, 0.0, 0.0,
             0.0, 0.0, 3.1623, 0.0, 0.0, 2.5347, 0.0,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
             
-   /* little more aggresive:
-    lqr_Q_ = [..];  (7x7) Q.diag = [1.2, 1.2, 8.2, 0.02, 0.02, 0.1, 1]
-    lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
-  */
-  if( use_stricter_gains_ )
-  {
-    lqr_K_ << 1.225, 0.0, 0.0, 1.5731, 0.0, 0.0, 0.0,
-              0.0, 1.225, 0.0, 0.00, 1.5731, 0.0, 0.0,
-              0.0, 0.0, 3.2016, 0.0, 0.0, 2.550, 0.0,
-              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-    RCLCPP_WARN( get_logger(), "LQR: stricter gains requested!" );
+    /* little more aggresive:
+      lqr_Q_ = [..];  (7x7) Q.diag = [1.2, 1.2, 8.2, 0.02, 0.02, 0.1, 1]
+      lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
+    */
+    if( use_stricter_gains_ )
+    {
+      lqr_K_ << 1.225, 0.0, 0.0, 1.5731, 0.0, 0.0, 0.0,
+                0.0, 1.225, 0.0, 0.00, 1.5731, 0.0, 0.0,
+                0.0, 0.0, 3.2016, 0.0, 0.0, 2.550, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
+      RCLCPP_WARN( get_logger(), "LQR: stricter gains requested!" );
+    }
   }
+  else if( controller_type == "vel-only" )
+  {
+    lqr_K_ << 0.0, 0.0, 0.0, 1.4995, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.00, 1.4995, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 2.5347, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
+    RCLCPP_WARN( get_logger(), "LQR: controlling only 3D velocities." );
+  }
+  else if( controller_type == "NEvel-Dpos" )
+  {
+    lqr_K_ << 0.0, 0.0, 0.0, 1.4995, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.00, 1.4995, 0.0, 0.0,
+            0.0, 0.0, 3.1623, 0.0, 0.0, 2.5347, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
+    RCLCPP_WARN( get_logger(), "LQR: controlling 2D velocity and vertical position." );
+  }
+  else
+    RCLCPP_ERROR( get_logger(), "LQR: Controller type unknown!" );
 }
 
 void LQRController::biasEnableServer( const BoolServ::Request::SharedPtr rq,
