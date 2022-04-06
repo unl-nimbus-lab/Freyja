@@ -138,6 +138,7 @@ TrajectoryGenerator::TrajectoryGenerator() : rclcpp::Node( rclcpp_NODE_NAME )
   traj_alloc_speed_ = 1.0;
 
   traj_init_ = false;
+  t_traj_init_ = now();
 
   // default to speed mode (as per waypoint default)
   wp_mode_ = speed_mode;
