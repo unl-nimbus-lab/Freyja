@@ -10,6 +10,12 @@
 # are, of course, free to consume it however.
 
 std_msgs/Header  header
-int8    is_connected    # comms to vehicle
-int8    is_armed        # motors on
-int8    is_compctrl     # mode == computer
+bool    connected       # comms to vehicle
+bool    armed           # motors on
+bool    computer_ctrl   # mode == computer
+# extra rc channels (as boolean (>1500))
+bool    aux1
+bool    aux2
+bool    aux3
+bool    aux4
+
