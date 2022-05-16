@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 2.8.3)
-#cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.8)
 project(freyja_configfiles)
 
+find_package( ament_cmake REQUIRED )
 
-find_package(catkin REQUIRED COMPONENTS
-#  message_generation
-#  roscpp
-#  common_msgs
-#  cmake_modules
+install( DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
 )
+
+ament_package()

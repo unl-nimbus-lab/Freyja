@@ -23,6 +23,9 @@
 #include "std_srvs/srv/set_bool.hpp"
 
 #include "freyja_msgs/msg/ctrl_command.hpp"
+#include "freyja_msgs/msg/freyja_internal_status.hpp"
+
+typedef freyja_msgs::msg::FreyjaInternalStatus FreyjaIntStatus;
 
 #define PITCH_MAX 0.785398
 #define PITCH_MIN -0.785398
@@ -54,11 +57,18 @@ class MavrosHandler : public rclcpp::Node
 {
   bool vehicle_armed_;
   bool in_computer_mode_;
+  std::string computer_mode_name_;
+
+  FreyjaIntStatus fstatus_;
 
   public:
     MavrosHandler();
 
     rclcpp::Publisher<AttiTarget>::SharedPtr atti_pub_;
+
+    rclcpp::Publisher<FreyjaIntStatus>::SharedPtr fstatus_pub_;
+    void status_publisher();
+    rclcpp::TimerBase::SharedPtr status_timer_;
 
     rclcpp::Subscription<CtrlCommand>::SharedPtr ctrlCmd_sub_;
     void rpytCommandCallback( const CtrlCommand::ConstSharedPtr );
@@ -91,6 +101,8 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   auto qos = rclcpp::QoS( rclcpp::KeepLast(1) ).best_effort().durability_volatile();
   vehicle_armed_ = false;
   in_computer_mode_ = false;
+  computer_mode_name_ = "GUIDED_NOGPS";
+
   declare_parameter<double>( "thrust_scaler", 200.0 );
   get_parameter( "thrust_scaler", THRUST_SCALER );
 
@@ -105,6 +117,12 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   bias_comp_ = create_client <BoolServ> ( "set_auto_biascomp" );
 
   atti_pub_ = create_publisher <AttiTarget> ( "mavros/setpoint_raw/attitude", 1 );
+  fstatus_pub_ = create_publisher <FreyjaIntStatus> ( "freyja_internal_status", 1 );
+
+  float status_pubrate = 5.0;     // Hz
+  status_timer_ = rclcpp::create_timer( this, get_clock(),
+                          std::chrono::duration<float>(1.0/status_pubrate),
+                          std::bind(&MavrosHandler::status_publisher, this) );
 }
 
 void MavrosHandler::rpytCommandCallback( const CtrlCommand::ConstSharedPtr msg )
@@ -172,19 +190,22 @@ void MavrosHandler::mavrosStateCallback( const MavState::ConstSharedPtr msg )
   }
   
   /* call bias compensation service when switching in/out of computer */
-  BoolServ::Request::SharedPtr biasreq;
-  if( msg->mode == "CMODE(25)" && !in_computer_mode_ )
+  auto biasreq = std::make_shared<BoolServ::Request> ();
+  if( msg->mode == computer_mode_name_ && !in_computer_mode_ )
   {
     in_computer_mode_ = true;
     biasreq -> data = true;
     bias_comp_ -> async_send_request( biasreq );
   }
-  else if( msg->mode != "CMODE(25)" && in_computer_mode_ )
+  else if( msg->mode != computer_mode_name_ && in_computer_mode_ )
   {
     in_computer_mode_ = false;
     biasreq -> data = false;
     bias_comp_ -> async_send_request( biasreq );
   }
+    
+  fstatus_.armed = vehicle_armed_;
+  fstatus_.computer_ctrl = in_computer_mode_;
 }
 
 
@@ -210,6 +231,21 @@ void MavrosHandler::mavrosRCCallback( const RCInput::ConstSharedPtr msg )
   }
   
   */
+  if( (msg->channels).size() < 2 )
+    return;
+
+  // rc channels 0-3 are usually rpyt sticks;
+  // ..  most transmitters will have at least 4 extra channels.
+  fstatus_.aux1 = (msg->channels[4]) > 1500;
+  fstatus_.aux2 = (msg->channels[5]) > 1500;
+  fstatus_.aux3 = (msg->channels[6]) > 1500;
+  fstatus_.aux4 = (msg->channels[7]) > 1500;
+}
+
+// This function is on a timer, called at fixed (pretty low) rate
+void MavrosHandler::status_publisher()
+{
+  fstatus_pub_ -> publish( fstatus_ );
 }
 
 int main( int argc, char **argv )
