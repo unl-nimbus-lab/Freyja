@@ -132,7 +132,7 @@ void StateManager::initPixhawkManager()
   // mavros_gpsraw_sub_ = create_subscription( "/mavros/global_position/global", 1,
   //                               std::bind(&StateManager::mavrosGpsRawCallback, this, _1 );
   auto qos = rclcpp::QoS(rclcpp::KeepLast(5)).best_effort().durability_volatile();
-  mavros_gpsodom_sub_ = create_subscription<nav_msgs::msg::Odometry> ( "/mavros/global_position/local", qos,
+  mavros_gpsodom_sub_ = create_subscription<nav_msgs::msg::Odometry> ( "mavros/global_position/local", qos,
                                 std::bind( &StateManager::mavrosGpsOdomCallback, this, _1 ) );
   mavros_rtk_sub_ = create_subscription<geometry_msgs::msg::Vector3> ( "ublox_f9p_rtkbaseline", 1,
                                 std::bind( &StateManager::mavrosRtkBaselineCallback, this, _1 ) );

@@ -83,9 +83,7 @@ class TrajectoryGenerator : public rclcpp::Node
   
   float k_thresh_skipreplan_;
 
-  float init_pn_;
-  float init_pe_;
-  float init_pd_;
+  std::vector<double> init_NED_;
   float init_yaw_;
   
   int terminal_style_; // 0: posn+vel, 1: posn+vel+acc
@@ -120,14 +118,10 @@ TrajectoryGenerator::TrajectoryGenerator() : rclcpp::Node( rclcpp_NODE_NAME )
   k_thresh_skipreplan_ = 0.10;       // don't replan if new point within this radius
 
   /* initial location for hover */
-  declare_parameter<float>( "init_pn", 0.0 );
-  declare_parameter<float>( "init_pe", 0.0 );
-  declare_parameter<float>( "init_pd", -0.75 );
+  declare_parameter<std::vector<double>>( "init_NED", std::vector<double>({0, 0, -0.75}) );
   declare_parameter<float>( "init_yaw", 0.0 );
 
-  get_parameter( "init_pn", init_pn_ );
-  get_parameter( "init_pe", init_pe_ );
-  get_parameter( "init_pd", init_pd_ );
+  get_parameter( "init_NED", init_NED_ );
   get_parameter( "init_yaw", init_yaw_ );
 
   /* unused argument for trajectory shaping */
@@ -385,9 +379,9 @@ void TrajectoryGenerator::publishHoverReference()
   if( !traj_init_ )
   {
     // trajectory hasn't been initialsed
-    traj_ref_.pn = init_pn_;
-    traj_ref_.pe = init_pe_;
-    traj_ref_.pd = init_pd_;
+    traj_ref_.pn = init_NED_[0];
+    traj_ref_.pe = init_NED_[1];
+    traj_ref_.pd = init_NED_[2];
     traj_ref_.yaw = init_yaw_;
   }
   else
