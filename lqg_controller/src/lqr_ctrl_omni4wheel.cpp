@@ -17,7 +17,6 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
                                                  bias_est_( b )
 {
   int controller_rate_default = 30;
-  float mass_default = 0.85;
   
   declare_parameter<int>( "controller_rate", controller_rate_default );
   declare_parameter<bool>( "enable_flatness_ff", false );
@@ -120,7 +119,7 @@ void LQRController::initLqrSystem()
   }
 
   RCLCPP_INFO( get_logger(), "Controller: %s, using flatness: %d", 
-                              controller_type_, int(enable_flatness_ff_) );
+                              controller_type_.c_str(), int(enable_flatness_ff_) );
 
 
   double ch_l, ch_w;
