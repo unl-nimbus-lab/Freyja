@@ -207,15 +207,19 @@ void ApmModeArbitrator::manager()
           e_landing_ = true;
         }
         
-        // push reference state down until sub-arming altitude
-        if( pos_ned_(2) < arming_ned_(2) )
+        // push reference state down as long as above arming altitude or reference
+        if( (pos_ned_(2) < arming_ned_(2)) || (manager_refstate_.pd-3.0 < arming_ned_(2)) )
         {
           manager_refstate_.pd += (takeoff_spd_*1.0/arbitrator_rate_);
           manager_refstate_.vd = takeoff_spd_;
+          refstate_pub_->publish( manager_refstate_ );
         }
         else
         {
-          // send disarm command and freeze
+          // be extra sure we have pushed reference down enough
+          manager_refstate_.pd = arming_ned_(2) + 5.0;
+          refstate_pub_->publish( manager_refstate_ );
+          // send disarm command and freeze arbitration
           sendMavrosArmCommand( false );
           mission_mode_ = MissionMode::MISSION_END;
         }
