@@ -6,7 +6,7 @@ launch:
 - arg: { name: "tf_myframe",        default: "uas1"  }
 - arg: { name: "tf_baseframe",      default: "map"  }
   # controller customisations
-- arg: { name: "total_mass",        default: "1.0" }      # kg, total mass flying
+- arg: { name: "total_mass",        default: "1.00" }     # kg, total mass flying
 - arg: { name: "thrust_scaler",     default: "25.0" }     # scales from Newtons to [0..1]
 - arg: { name: "bias_compensation", default: "off" }      # on, off, auto
 - arg: { name: "flatness_ff",       default: "false" }    # use accel feed-fwd
@@ -82,4 +82,4 @@ launch:
         pkg:        "apm_handler"
         exec:       "apm_handler_node"
         param:
-        - { name:   "thrust_scaler",    value:  25.0 }
+        - { name:   "thrust_scaler",    value:  "$(var thust_scaler)" }
