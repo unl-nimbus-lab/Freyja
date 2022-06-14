@@ -53,7 +53,7 @@
   	<param name="enable_flatness_ff"  type="bool"   value="$(arg enable_flatness_ff)" />
   </node>
   
-  <node name="lqr_vel_controller" pkg="lqr_control" type="lqr_vel_ctrl_node"
+  <node name="lqr_vel_controller" pkg="lqg_control" type="lqr_vel_ctrl_node"
   			if="$(eval use_velctrl_only)">
     <param name="controller_rate"   type="int"    value="30" />
     <param name="total_mass"        type="double" value="$(arg total_mass)" />
