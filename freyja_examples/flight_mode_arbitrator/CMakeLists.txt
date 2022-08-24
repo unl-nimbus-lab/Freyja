@@ -50,5 +50,5 @@ else()
     DESTINATION lib/flight_mode_arbitrator
   )
 
-endif() # NO_PIXHAWK
 ament_package()
+endif() # NO_PIXHAWK
