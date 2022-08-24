@@ -7,7 +7,7 @@ add_compile_options(-std=c++14 -O3)
 SET(NO_PIXHAWK "false" CACHE BOOL "Building Pixhawk interface handler or not?")
 
 if( NO_PIXHAWK )
-  message( AUTHOR_WARNING "\n\t\tFREYJA: Ignoring mavros interface to Pixhawk!\n" )
+  message( AUTHOR_WARNING "\n\t\tFREYJA:: Skip package: ignoring package with mavros dependency!\n" )
   message( NOTICE "\tFREYJA: User-requested ignore apm_handler package. Please ensure alternative means of communications!\n" )
 else()
 
