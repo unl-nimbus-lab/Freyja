@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(state_manager)
 
+set( ignoreMe "${NO_PIXHAWK}${NO_ROBOMASTER}" )
+
 # outdated flag, has no effect. Will be removed in the future.
 set( USINGVICON 1 )
 set( LQE_ORDER 2 )

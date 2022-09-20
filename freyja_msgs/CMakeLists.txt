@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(freyja_msgs)
 
+set( ignoreMe "${NO_PIXHAWK}${NO_ROBOMASTER}" )
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++14)
 
