@@ -63,7 +63,7 @@ void StateManager::mocapCallback( const TFStamped::ConstSharedPtr msg )
   /* rpy rates (no filter yet, use with caution!) */
   state_vector_[9] = ( roll - last_roll_ )/time_since;
   state_vector_[10] = ( pitch - last_pitch_ )/time_since;
-  state_vector_[11] = ( yaw - last_yaw_ )/time_since;
+  state_vector_[11] = std::fmod( (yaw - last_yaw_)/time_since, 2*F_PI );
   
   /* age of this data */
   state_vector_[12] = time_since;

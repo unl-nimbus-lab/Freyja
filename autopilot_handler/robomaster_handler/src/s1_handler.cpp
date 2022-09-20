@@ -39,10 +39,10 @@ void S1Handler::wheelSpeedCallback( const WheelCommand::ConstSharedPtr msg )
   /* The controller outputs target wheel speeds in rad/s. We must convert them into
     RPMs in the range [-1000, 1000] (int16_t) for DJI
   */
-  target_wheel_rpm_.fl = std::round( OMEGA2RPM(msg -> w1) );
-  target_wheel_rpm_.fr = std::round( OMEGA2RPM(msg -> w2) );
-  target_wheel_rpm_.rr = std::round( OMEGA2RPM(msg -> w3) );
-  target_wheel_rpm_.rl = std::round( OMEGA2RPM(msg -> w4) );
+  target_wheel_rpm_.fl = std::max( -1000, std::min( 1000, int(OMEGA2RPM(msg -> w1)) ) );
+  target_wheel_rpm_.fr = std::max( -1000, std::min( 1000, int(OMEGA2RPM(msg -> w2)) ) );
+  target_wheel_rpm_.rr = std::max( -1000, std::min( 1000, int(OMEGA2RPM(msg -> w3)) ) );
+  target_wheel_rpm_.rl = std::max( -1000, std::min( 1000, int(OMEGA2RPM(msg -> w4)) ) );
 
   speed_rpm_pub_ -> publish( target_wheel_rpm_ );
 }

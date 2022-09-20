@@ -20,14 +20,16 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   
   declare_parameter<int>( "controller_rate", controller_rate_default );
   declare_parameter<bool>( "enable_flatness_ff", false );
+  declare_parameter<bool>( "use_accels_as_limits", false );
   declare_parameter<std::string>( "bias_compensation", "auto" );
-  declare_parameter<std::string>( "controller_type", "order-2" );
+  declare_parameter<std::string>( "controller_type", "pos-vel" );
 
   declare_parameter<double>( "chassis_length", 0.4 );
   declare_parameter<double>( "chassis_width", 0.3 );
   declare_parameter<double>( "wheel_radius", 0.10 );
   
   get_parameter( "controller_rate", controller_rate_ );
+  get_parameter( "use_accels_as_limits", enable_accel_limiting_ );
 
   
   /* Associate a subscriber for the current vehicle state */
@@ -93,21 +95,20 @@ void LQRController::initLqrSystem()
     lqr_R_ = [..];  (4x4) R.diag = [0.8, 0.8, 0.8, 1]
   */
   get_parameter( "controller_type", controller_type_ );
+  get_parameter( "enable_flatness_ff", enable_flatness_ff_ );
   if( controller_type_ == "pos-vel" )
   {
     // position, velocity (+ff), and yaw : order-2-ff
     lqr_K_ << 2.1472,   0,        0,        0.1,     0,        0,
               0,        2.1472,   0,        0,       0.1,      0,
               0,        0,        3.4162,   0,       0,        0.12;
-    enable_flatness_ff_ = true;
   } 
   else if( controller_type_ == "vel-only" )
   {
     // velocity (+ff), and yaw : order-1-ff
-    lqr_K_ << 0,       0,      0,        0.272,     0,        0,
-              0,       0,      0,        0,         0.272,    0,
+    lqr_K_ << 0,       0,      0,        0.172,     0,        0,
+              0,       0,      0,        0,         0.172,    0,
               0,       0,      3.4162,   0,         0,        0.18;
-    enable_flatness_ff_ = true;
   }
   else if( controller_type_ == "open-loop" )
   {
@@ -214,7 +215,11 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstSharedPtr m
   
   reference_ff_ << msg->vn, msg->ve, 0.0;    // feed-forward
   have_reference_update_ = true;
+
+  accel_limits_ << msg->an, msg->ae, 0.0;    // clip vel-out by these 
 }
+
+
 
 __attribute__((optimize("unroll-loops")))
 void LQRController::computeFeedback( )
@@ -224,7 +229,7 @@ void LQRController::computeFeedback( )
     return;
   
   static Eigen::Matrix<double, 4, 1> wheel_speeds;
-  static Eigen::Matrix<double, 3, 1> control_input;
+  static Eigen::Matrix<double, 3, 1> control_input, prev_control_input;
   static Eigen::Matrix<double, 6, 1> state_err;
   
   bool state_valid = true;
@@ -247,7 +252,8 @@ void LQRController::computeFeedback( )
                     + static_cast<double>(enable_flatness_ff_) * reference_ff_;
   
     /* Force saturation on acceleration */
-
+    constrainAccel( prev_control_input, control_input );
+    prev_control_input = control_input;
     
     /* See if bias compensation was requested .. */
     if( bias_compensation_req_ )
@@ -282,7 +288,7 @@ void LQRController::computeFeedback( )
   for( uint8_t idx=0; idx<3; idx++ )
     debug_msg.lqr_u[idx] = static_cast<float>(control_input(idx));
   for( uint8_t idx=0; idx<3; idx++ )
-    debug_msg.biasv[idx] = static_cast<float>(f_biases_(idx));
+    debug_msg.biasv[idx] = static_cast<float>(prev_control_input(idx));
   for( uint8_t idx=0; idx<6; idx++ )
     debug_msg.errv[idx] = static_cast<float>(state_err(idx));
 
@@ -296,6 +302,15 @@ void LQRController::computeFeedback( )
 void LQRController::estimateMass( const double &c, rclcpp::Time &t )
 {
   
+}
+
+void LQRController::constrainAccel( const Eigen::Matrix<double,3,1> &prev, 
+                                    Eigen::Matrix<double,3,1> &cur )
+{
+  Eigen::Vector3d req_accel = (cur-prev)*controller_rate_;                              // requested
+  accel_limits_ = (accel_limits_.array().abs() < 1e-2).select(1000.0, accel_limits_);   // if near-zero, set to "inf"
+  req_accel = req_accel.cwiseMin( accel_limits_ ).cwiseMax( -accel_limits_ );           // limit to range
+  cur = prev + req_accel*(1.0/controller_rate_);                                        // shaped
 }
 
 int main( int argc, char** argv )

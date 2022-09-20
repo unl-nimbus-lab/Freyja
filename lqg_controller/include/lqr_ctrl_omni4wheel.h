@@ -50,7 +50,9 @@ class LQRController : public rclcpp::Node
   /* Reference state vector */
   Eigen::Matrix<double, 6, 1> reference_state_;
   Eigen::Matrix<double, 3, 1> reference_ff_;
+  Eigen::Matrix<double, 3, 1> accel_limits_;
   bool enable_flatness_ff_;
+  bool enable_accel_limiting_;
   
   /* Rate of execution for LQR's feedback */
   int controller_rate_;
@@ -115,4 +117,6 @@ class LQRController : public rclcpp::Node
     /* estimate actual mass in flight */
     void estimateMass( const double &, rclcpp::Time & );
     rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr est_mass_pub_;
+
+    void constrainAccel( const Eigen::Matrix<double,3,1> &prev, Eigen::Matrix<double,3,1> &cur );
 };

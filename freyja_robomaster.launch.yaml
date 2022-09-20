@@ -1,0 +1,44 @@
+launch:
+  # state customisations
+- arg: { name: "tf_myframe",        default: "robomaster_-1"  }
+- arg: { name: "tf_baseframe",      default: "map"  }         # assumed ENU
+  # controller customisations
+- arg: { name: "controller_type",   default: "pos-vel"  }     # pos-vel, vel-only, open-loop
+- arg: { name: "flatness_ff",       default: "false" }        # use velocity as feed-fwd
+- arg: { name: "accels_as_limits",  default: "false" }        # interpret accles as limits
+  # extras
+- arg: { name: "use_waypoint_handler", default: "false" }
+
+- group:
+  - push-ros-namespace: "$(var tf_myframe)"
+  - node:
+      pkg:        "state_manager"
+      exec:       "state_manager_node"
+      output:     "screen"
+      param:
+      - { name:   "state_source",       value:  "tf-mocap" }
+      - { name:   "tf_rate",            value:  190 }
+      - { name:   "tf_myframe",         value:  "$(var tf_myframe)" }
+      - { name:   "tf_baseframe",       value:  "$(var tf_baseframe)" }
+      - { name:   "filter_type",        value:  "median" }
+
+  - node:
+      pkg:        "lqg_control"
+      exec:       "lqg_4wheel_node"
+      output:     "screen"
+      param:
+      - { name:   "controller_rate",      value:  50 }
+      - { name:   "chassis_length",       value:  0.10 }
+      - { name:   "chassis_width",        value:  0.10 } 
+      - { name:   "wheel_radius",         value:  0.05 }
+      - { name:   "controller_type",      value:  "$(var controller_type)" }
+      - { name:   "enable_flatness_ff",   value:  "$(var flatness_ff)" }
+      - { name:   "use_accels_as_limits", value:  "$(var accels_as_limits)" }
+
+  - node:
+      pkg:  "robomaster_handler"
+      exec: "s1_interface"
+      output: "screen"
+      remap:
+      - { from:   "controller_command",   to:     "wheel_command" }   # this node's subsciber, to controller's published name
+      - { from:   "target_rpm",           to:     "cmd_wheels"    }   # this node's publisher, to robomaster's interface subs
