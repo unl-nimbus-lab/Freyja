@@ -308,7 +308,7 @@ void TrajectoryGenerator::trajectoryReference( )
   not been recorded yet, we must stay at initial position.
   */
     
-  float tnow = (now() - t_traj_init_).seconds();
+  float tnow = traj_init_ ? (now() - t_traj_init_).seconds() : -1.0;
   
   static PosVelAccNED3x3 tref; // [pn, pe, pd;; vn, ve, vd;; an, ae, ad]
 

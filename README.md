@@ -1,5 +1,5 @@
 # Freyja
-High-level control stack for precise multirotor & ground-robot control, designed and used extensively in the Nimbus Lab.
+High-level control stack for precise multirotor & ground-robot control, designed and used extensively in the Nimbus & Prorok Lab.
 
 Freyja bundles ROS2 packages that implement fast and accurate state estimators, an optimal feedback controller (LQR/LQG), and generalized interfaces for common autopilots that make it suitable for several precise and aggressive flight manuevers.
 **Only in ROS2**, Freyja also includes a model-based controller for omni-directional ground robots (using mecanum-wheel drives), and a sample interface for DJI Robomasters.
