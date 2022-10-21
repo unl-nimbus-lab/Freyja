@@ -1,16 +1,9 @@
 # mavros_param.yaml
 /**:
   ros__parameters: 
-    plugin_denylist: ["cam_imu_sync",
-    "camera","ftp","altitude","actuator_control",
-    "gps_status",
-    "wheel*","param*","way*","adsb*",
-    "wind*", "vision*", "tunnel*", "vfr*", "vib*",
-    "geofence",
-    "setpoint_accel", "setpoint_velocity", "setpoint_trajectory",
-    "imu",
-    "nav_controller_output", "manual_control", "rallypoint", "sys_time"
-    ]
+    plugin_denylist: ["*"]
+    plugin_allowlist: ["sys_status", "command", "setpoint_raw"]
+    fcu_url: /dev/ttyAMA0:921600
 
 /**:
   ros__parameters:
@@ -18,7 +11,3 @@
 mavros_router:
   ros__parameters: {}
 
-mavros_node:
-  ros__parameters:
-    fcu_url: tcp://127.0.0.1:5762/?ids=255,230
-    # serial:///dev/ttyAMA0:921600
