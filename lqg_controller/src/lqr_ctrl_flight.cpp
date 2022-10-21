@@ -71,12 +71,12 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   /* Bias compensation parameters */
   std::string _bcomp = "auto";
   get_parameter( "bias_compensation", _bcomp );
-  if( _bcomp == "on" )
+  if( _bcomp == "always-on" )
     bias_compensation_req_ = true;                // always on (be careful!!)
-  else if( _bcomp == "auto" || _bcomp == "off" )
+  else if( _bcomp == "auto" || _bcomp == "always-off" )
     bias_compensation_req_ = false;               // off, or on by service call
   
-  bias_compensation_off_ = (_bcomp == "off")? true : false;   // always off
+  bias_compensation_off_ = (_bcomp == "always-off")? true : false;   // always off
   
   f_biases_ << 0.0, 0.0, 0.0;
   
