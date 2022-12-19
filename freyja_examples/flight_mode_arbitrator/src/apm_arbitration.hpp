@@ -26,6 +26,7 @@ typedef freyja_msgs::msg::CurrentState          CurrentState;
 typedef freyja_msgs::msg::ReferenceState        ReferenceState;
 typedef mavros_msgs::srv::CommandBool           MavrosArming;
 typedef std_srvs::srv::Trigger                  Trigger;
+typedef std_srvs::srv::SetBool                  BoolServ;
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -82,8 +83,8 @@ class ApmModeArbitrator : public rclcpp::Node
   VehicleMode vehicle_mode_;
   MissionMode mission_mode_;
 
-  Eigen::Vector3d pos_ned_;         // current state 
-  Eigen::Vector3d arming_ned_;
+  Eigen::Vector4d pos_ned_;         // current state 
+  Eigen::Vector4d arming_ned_;
   ReferenceState incoming_ref_;     // policy's references
   ReferenceState manager_refstate_; // manager's reference state
 
@@ -118,12 +119,13 @@ class ApmModeArbitrator : public rclcpp::Node
 
     rclcpp::Subscription<CurrentState>::SharedPtr curstate_sub_;
     inline void currentStateCallback( const CurrentState::ConstSharedPtr msg )
-    { pos_ned_ = Eigen::Map<const Eigen::Vector3d>( msg->state_vector.data() ); }
+    { pos_ned_ << Eigen::Map<const Eigen::Vector3d>( msg->state_vector.data() ), double(msg->state_vector[8]); }
 
     rclcpp::Subscription<ReferenceState>::SharedPtr tgtstate_sub_;
     void targetStateCallback( const ReferenceState::ConstSharedPtr );
 
     rclcpp::Client<MavrosArming>::SharedPtr arming_client_;
+    rclcpp::Client<BoolServ>::SharedPtr biasreq_client_;
 
     rclcpp::Publisher<ReferenceState>::SharedPtr refstate_pub_;
 
@@ -131,10 +133,11 @@ class ApmModeArbitrator : public rclcpp::Node
     void eLandingServiceHandler( const Trigger::Request::SharedPtr,
                                  const Trigger::Response::SharedPtr );
 
-    inline void updateManagerRefNED( const Eigen::Vector3d &ned )
+    inline void updateManagerRefNED( const Eigen::Vector4d &ned )
     {
       manager_refstate_.pn = ned(0);
       manager_refstate_.pe = ned(1);
       manager_refstate_.pd = ned(2);
+      manager_refstate_.yaw = ned(3);
     }
 };

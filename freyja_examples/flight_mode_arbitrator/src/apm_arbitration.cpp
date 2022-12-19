@@ -22,6 +22,9 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
   target_state_avail_ = false;
   t_clock_ = 0.0;
 
+  vehicle_mode_ = VehicleMode::NO_CONNECT;
+  mission_mode_ = MissionMode::PENDING_PILOT;
+
   curstate_sub_ = create_subscription<CurrentState>( "current_state", 1, 
                             std::bind(&ApmModeArbitrator::currentStateCallback,this,_1) );
   tgtstate_sub_ = create_subscription<ReferenceState>( "target_state", 1,
@@ -31,6 +34,7 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
   refstate_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );                            
 
   arming_client_ = create_client<MavrosArming> ("mavros/cmd/arming" );
+  biasreq_client_ = create_client<BoolServ> ("set_bias_compensation" );
 
   elanding_serv_ = create_service<Trigger>( "blind_software_landing",
                             std::bind(&ApmModeArbitrator::eLandingServiceHandler, this, _1, _2) );
@@ -43,7 +47,7 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
 
 void ApmModeArbitrator::loadParameters()
 {
-  takeoff_spd_ = 0.2;                               // m/s
+  takeoff_spd_ = 0.1;                               // m/s
   get_parameter( "init_hover_pd", init_hover_pd_ ); // hover here at first takeoff
   get_parameter( "arm_takeoff_delay", ARM_TAKEOFF_DELAY );
   get_parameter( "mission_wdg_timeout", MISSION_WDG_TIMEOUT );
@@ -79,7 +83,13 @@ void ApmModeArbitrator::eLandingServiceHandler( const Trigger::Request::SharedPt
 void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIntStatus::ConstSharedPtr msg )
 {
   /* msg contains vehicle mode, armed?, and rcdata */
-  
+  static int skip_initial_msgs = 0;
+  if( skip_initial_msgs < 20 )
+  {
+    skip_initial_msgs++;
+    RCLCPP_WARN( get_logger(), "Intentionally waiting .." );
+    return;
+  }
   // in comp ctrl but not armed
   if( msg->armed == false && msg->computer_ctrl )
   {
@@ -167,6 +177,7 @@ void ApmModeArbitrator::manager()
         {
           manager_refstate_.pd -= (takeoff_spd_*1.0/arbitrator_rate_);
           manager_refstate_.vd = -takeoff_spd_;
+          RCLCPP_WARN_THROTTLE( get_logger(), *(get_clock()), 500, "TAKEOFF ALT: %0.1f/%0.1f", pos_ned_(2), init_hover_pd_ );
         }
         else
         {
@@ -175,6 +186,10 @@ void ApmModeArbitrator::manager()
           updateManagerRefNED( pos_ned_ );
           RCLCPP_INFO( get_logger(), "Done takeoff." );
           mission_mode_ = MissionMode::HOVERING;
+
+          auto biasreq = std::make_shared<BoolServ::Request> ();
+          biasreq -> data = true;
+          biasreq_client_ -> async_send_request( biasreq );
         }
         refstate_pub_->publish( manager_refstate_ );
         forward_ref_state_ = false;
@@ -208,7 +223,8 @@ void ApmModeArbitrator::manager()
         }
         
         // push reference state down as long as above arming altitude or reference
-        if( (pos_ned_(2) < arming_ned_(2)) || (manager_refstate_.pd-3.0 < arming_ned_(2)) )
+        // @TODO: replace with an abstracted "not landingComplete()"
+        if( (pos_ned_(2) < arming_ned_(2)) || (manager_refstate_.pd - 3.0 < arming_ned_(2)) )
         {
           manager_refstate_.pd += (takeoff_spd_*1.0/arbitrator_rate_);
           manager_refstate_.vd = takeoff_spd_;

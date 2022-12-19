@@ -7,7 +7,7 @@ launch:
 - arg: { name: "tf_baseframe",      default: "map"  }         # assumed ENU
   # controller customisations
 - arg: { name: "total_mass",        default: "1.00" }         # kg, total mass flying
-- arg: { name: "thrust_scaler",     default: "25.0" }         # scales from Newtons to [0..1]
+- arg: { name: "thrust_scaler",     default: "50.0" }         # scales from Newtons to [0..1]
 - arg: { name: "bias_compensation", default: "always-off" }   # auto, always-{on, off}
 - arg: { name: "flatness_ff",       default: "false" }        # use accel feed-fwd
 - arg: { name: "controller_type",   default: "pos-vel"  }     # pos-vel, vel-only, NEvel-Dpos
@@ -21,27 +21,33 @@ launch:
 - arg: { name: "use_examples",         default: "false" }
 
 - group:
-  - push-ros-namespace: "$(var use_namespace)"
+  - push-ros-namespace:
+      namespace:  "$(var use_namespace)"
   - node:
       pkg:        "state_manager"
       exec:       "state_manager_node"
+      output:     "screen"
       param:
       - { name:   "state_source",       value:  "$(var state_source)" }
-      - { name:   "tf_rate",            value:  190 }
+      - { name:   "tf_rate",            value:  100 }
       - { name:   "tf_myframe",         value:  "$(var tf_myframe)" }
       - { name:   "tf_baseframe",       value:  "$(var tf_baseframe)" }
-      - { name:   "filter_type",        value:  "median" }
+      - { name:   "filter_type",        value:  "kalman" }
+      - { name:   "kf_params",          value:  [1.0, 0.05, 0.001, 100.0] }
 
   - node:
       pkg:        "lqg_control"
       exec:       "lqg_flight_node"
       param:
-      - { name:   "bias_compensation",  value:  "$(var bias_compensation)" }
       - { name:   "total_mass",         value:  "$(var total_mass)" }   #0.85
       - { name:   "controller_rate",    value:  50 }
       - { name:   "estimator_rate",     value:  20 }
+      - { name:   "bias_compensation",  value:  "$(var bias_compensation)" }
+      - { name:   "apply_est_biases",   value:  true }
       - { name:   "controller_type",    value:  "$(var controller_type)" }
       - { name:   "enable_flatness_ff", value:  "$(var flatness_ff)" }
+      remap:
+      - { from:   "pred_ext_forces",    to:     "ext_forces_gt" }
 
   - node:
       if:         "$(var use_arbitrator)"
@@ -55,7 +61,9 @@ launch:
       pkg:        "waypoint_manager"
       exec:       "waypoint_manager_node"
       param:
-      - { name:   "init_NED",           value:  [0.0, 0.0, -0.75] }
+      - { name:   "init_NED",           value:  [0.0, 0.0, -1.75] }
+      #remap:
+      #- { from:   "reference_state",    to:     "target_state" }
 
   - node:
       if:         "$(eval ' \"$(var autopilot)\" == \"betaflight\" ')"
@@ -66,7 +74,7 @@ launch:
 
   - group:
     - node:
-        if:         "$(var using_mavros)"
+        if:         "$(var use_mavros)"
         pkg:        "apm_handler"
         exec:       "apm_handler_node"
         param:
@@ -74,7 +82,7 @@ launch:
 
     - node:
         namespace:  "mavros"                      # add another sub-namespace under the top
-        if:         "$(var using_mavros)"
+        if:         "$(var use_mavros)"
         pkg:        "mavros"
         exec:       "mavros_node"
         param:

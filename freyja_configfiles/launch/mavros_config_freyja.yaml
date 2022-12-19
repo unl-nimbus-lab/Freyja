@@ -2,7 +2,7 @@
 /**:
   ros__parameters: 
     plugin_denylist: ["*"]
-    plugin_allowlist: ["sys_status", "command", "setpoint_raw"]
+    plugin_allowlist: ["sys_status", "command", "setpoint_raw", "global_position"]
     fcu_url: /dev/ttyAMA0:921600
 
 /**:
