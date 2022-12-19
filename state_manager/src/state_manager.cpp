@@ -18,7 +18,7 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
   declare_parameter<std::string>( "state_source", "mocap" );
   declare_parameter<std::string>( "filter_type", "median" );
   declare_parameter<int>( "filter_length", 21 );
-
+  declare_parameter<std::vector<double>> ("kf_params", std::vector<double>({0.1, 0.1, 0.2, 0.5}));
 
   get_parameter( "state_source", state_source_ );
   get_parameter( "filter_type", filter_type_ );
@@ -26,7 +26,7 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
   
   if( state_source_ == "mocap" )
     initMocapManager();
-  else if( state_source_ == "tf_mocap" )
+  else if( state_source_ == "tf-mocap" )
     initTfManager();
   // else if( state_source_ == "asctec" )
   //   initAsctecManager();
@@ -34,7 +34,7 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
      initPixhawkManager();
   // else if( state_source_ == "onboard_camera" )
   //   initCameraManager();
-
+  use_kf_ = false;
 
   /* Announce state publisher */
   state_pub_ = create_publisher <CurrentState> ( "current_state", 1 ); 
@@ -69,6 +69,13 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
     rate_filter_ = FreyjaFilters( -1, "median", "~" );
     filter_len_ = pose_filter_.getCurrentFilterLen();
   }
+  else if( filter_type_ == "kalman" )
+  {
+    std::vector<double> kparams;
+    get_parameter("kf_params", kparams);
+    estimator_.init( 200, kparams[0], kparams[1], kparams[2], kparams[3] );
+    use_kf_ = true;
+  }
   else
     RCLCPP_WARN( get_logger(), "No filter initialised by Freyja." );
   
@@ -98,21 +105,26 @@ void StateManager::initMocapManager()
 void StateManager::initTfManager()
 {
   declare_parameter<int>( "tf_rate", 180 );
-  declare_parameter<std::string>( "state_base_frame", "map" );
-  declare_parameter<std::string>( "state_my_frame", "agent_1" );
+  declare_parameter<int>( "tf_buffer_time", 2 );
+  declare_parameter<std::string>( "tf_baseframe", "map" );
+  declare_parameter<std::string>( "tf_myframe", "agent_1" );
   
-  int tf_lookup_rate;
+  int tf_lookup_rate, tf_buffer_time;
   float tf_timer_freq;
+  auto tf_qos = rclcpp::QoS(10); //.best_effort().durability_volatile();
   
   get_parameter( "tf_rate", tf_lookup_rate );
-  get_parameter( "state_base_frame", tf_base_frame_ );
-  get_parameter( "state_my_frame", tf_my_frame_ );
+  get_parameter( "tf_buffer_time", tf_buffer_time );
+  get_parameter( "tf_baseframe", tf_base_frame_ );
+  get_parameter( "tf_myframe", tf_my_frame_ );
 
   RCLCPP_INFO( get_logger(), "Registered tf frames: [%s] to [%s]", tf_base_frame_.c_str(), tf_my_frame_.c_str() );
-  tf_buffer_ = std::make_unique<tf2_ros::Buffer>( get_clock() );
-  tf_listener_ = std::make_shared<tf2_ros::TransformListener>( *tf_buffer_ );
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>( get_clock(), std::chrono::seconds(tf_buffer_time) );
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>( *tf_buffer_, rclcpp::Node::make_shared("_"), true, tf_qos );
+  
+  // create fixed-rate timer
   tf_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(1.0/tf_lookup_rate),
-                          std::bind(&StateManager::timerTfCallback, this) );
+                                    std::bind(&StateManager::timerTfCallback, this) );
 
 }
 

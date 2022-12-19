@@ -34,6 +34,8 @@ namespace FreyjaUtils
       // derived classes must implement an init function
       virtual void init() = 0;
 
+      unsigned int getFilterLen() { return filter_len_; }
+
       // for markov-type state filters
       virtual void getStateEstimate( Eigen::VectorXd &x_est );
       virtual void getStateEstimate( Eigen::VectorXd &x_est, const int& n_states );

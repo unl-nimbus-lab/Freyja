@@ -5,58 +5,48 @@
 
   -- aj / Apr 18, 2019
 */
-#include "state_estimator.h"
+#include "state_estimator.hpp"
 
 #define ROS_NODE_NAME "state_estimator_kf"
 #define ZERO3x3 Eigen::MatrixXd::Zero(3,3)
+#define ZERO6x6 Eigen::MatrixXd::Zero(6,6)
+#define ZERO9x9 Eigen::MatrixXd::Zero(9,9)
 #define IDEN3x3 Eigen::MatrixXd::Identity(3,3)
-#define STPROP_SLEEP_US_ 14285
+#define IDEN6x6 Eigen::MatrixXd::Identity(6,6)
+#define IDEN9x9 Eigen::MatrixXd::Identity(9,9)
 
-StateEstimator::StateEstimator() : nh_(), priv_nh_("~")
+typedef std::chrono::microseconds uSeconds;
+
+StateEstimator::StateEstimator( )
 {
   // experimental:
   n_stprops_since_update_ = 0;
-  // listen to camera
-  state_sub_ = nh_.subscribe( "/current_state", 1,
-                                &StateEstimator::stateUpdatesCallback, this );
-  std::string output_topic;
-  priv_nh_.param( "output_topic", output_topic, std::string("/current_state_estimate") );
-  // for when all is said and done
-  state_pub_ = nh_.advertise <freyja_msgs::CurrentStateBiasFree>
-                  ( output_topic, 1, true );
- 
-  int estimator_rate_default = 70;
-  priv_nh_.param( "estimator_rate", estimator_rate_, estimator_rate_default );
-  float estimator_period = 1.0/estimator_rate_;
   n_stprops_allowed_ = 2.5;
-  
+  state_propagation_alive_ = false;
+}
+
+void StateEstimator::init( int e_rate, float mn, float np, float nv, float na )
+{
+  estimator_rate_ = std::move( e_rate );
+  estimator_period_us_ = std::round( (1.0/estimator_rate_)*1000*1000 );
+
   // constants for the lq-estimator
-  initLqeSystem( );
- 
-  // listen to controller 
-  ctrl_input_sub_ = nh_.subscribe( "/controller_debug", 1, 
-                                &StateEstimator::controlInputCallback, this );
-
-  /* ROS timers are pretty much unreliable for "high" rates:
-    estimator_timer_ = nh_.createTimer( ros::Duration(estimator_period),
-                                        &StateEstimator::state_propagation, this );
-                                        
-    Use thread libraries instead:
-  */
-
+  initLqeSystem( mn, np, nv, na );
+                           
+  // separate thread for state prop
   state_propagation_alive_ = true;
   last_prop_t_ = std::chrono::high_resolution_clock::now();
   state_prop_thread_ = std::thread( &StateEstimator::state_propagation, this );
-
 }
 
 StateEstimator::~StateEstimator()
 {
+  state_propagation_alive_ = false;
   state_prop_thread_.join();
   std::cout << "StateEstimator: propagation thread stopped!" << std::endl;
 }
 
-void StateEstimator::initLqeSystem( )
+void StateEstimator::initLqeSystem(float m_noise, float np, float nv, float na)
 {
   /* LQE model is a single/double integrator with downscaled ctrl inputs:
       x(k+1) = A.x(k) + B.u(k)
@@ -71,143 +61,83 @@ void StateEstimator::initLqeSystem( )
      allows Eigen to statically optimize its matrices. *This* I am smart about :)
   */
   
-  float dt = 1.0/estimator_rate_;
+  float dt = 1.0/float(estimator_rate_);
   float dt2 = dt*dt/2.0;
 
-  #if LQE_INTEGRATOR_ORDER_ == 2
-    sys_A_ << 1.0, 0.0, 0.0, dt, 0.0, 0.0, -dt2, 0.0, 0.0, 
-              0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, -dt2, 0.0,
-              0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, -dt2,
-              0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -dt, 0.0, 0.0,
-              0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -dt, 0.0,
-              0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -dt,
-              Eigen::MatrixXd::Zero(3,6), Eigen::MatrixXd::Identity(3,3);
-    sys_A_t_ = sys_A_.transpose();
+  sys_A_ << 1.0, 0.0, 0.0, dt, 0.0, 0.0, dt2, 0.0, 0.0, 
+            0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, dt2, 0.0,
+            0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0, dt2,
+            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt,
+            Eigen::MatrixXd::Zero(3,6), Eigen::MatrixXd::Identity(3,3);
+  sys_A_t_ = sys_A_.transpose();
 
-    sys_B_ << 0.0, 0.0, 0.0,
-              0.0, 0.0, 0.0,
-              0.0, 0.0, 0.0,
-              1.0, 0.0, 0.0,
-              0.0, 1.0, 0.0,
-              0.0, 0.0, 1.0,
-              Eigen::MatrixXd::Zero(3,3);
+  sys_B_ << ZERO3x3,
+            IDEN3x3,
+            ZERO3x3;
 
-    proc_noise_Q_ << 0.1*IDEN3x3, ZERO3x3, ZERO3x3,
-                     ZERO3x3, 0.25*IDEN3x3, ZERO3x3,
-                     ZERO3x3, ZERO3x3, 1*IDEN3x3;
-    meas_noise_R_ << 0.2*IDEN3x3, ZERO3x3,
-                     ZERO3x3, 2.5*IDEN3x3;
+  proc_noise_Q_ <<  np*IDEN3x3, ZERO3x3, ZERO3x3,
+                    ZERO3x3, nv*IDEN3x3, ZERO3x3,
+                    ZERO3x3, ZERO3x3, na*IDEN3x3;
+  meas_noise_R_ << m_noise*IDEN3x3;
 
-    meas_matrix_C_ << IDEN3x3, ZERO3x3, ZERO3x3,
-                      ZERO3x3, IDEN3x3, ZERO3x3;
+  meas_matrix_C_ << IDEN3x3, ZERO3x3, ZERO3x3;
 
-    meas_matrix_C_t = meas_matrix_C_.transpose();
+  meas_matrix_C_t_ = meas_matrix_C_.transpose();
+
+  state_cov_P_ = 10.0*IDEN9x9;
   
-    state_cov_P_ = 1*Eigen::MatrixXd::Identity(9,9);
-    
-    // guess some initial state 
-    best_estimate_ << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-    prev_vel1_ << 0.0, 0.0, 0.0;
-    prev_vel2_ << 0.0, 0.0, 0.0;
+  // guess some initial state 
+  best_estimate_.setZero();
+  ctrl_input_u_.setZero();
+  prev_vel1_.setZero();
+  prev_vel2_.setZero();
 
-  #else
-    sys_A_ << 1.0, 0.0, 0.0, dt, 0.0, 0.0, 
-              0.0, 1.0, 0.0, 0.0, dt, 0.0, 
-              0.0, 0.0, 1.0, 0.0, 0.0, dt,
-              0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-              0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
-              0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-    sys_A_t_ = sys_A_.transpose();
-
-    sys_B_ << 0.0, 0.0, 0.0,
-              0.0, 0.0, 0.0,
-              0.0, 0.0, 0.0,
-              1.0, 0.0, 0.0,
-              0.0, 1.0, 0.0,
-              0.0, 0.0, 1.0;
-
-    proc_noise_Q_ << 0.1*IDEN3x3, ZERO3x3, 
-                     ZERO3x3, 0.25*IDEN3x3;
-    meas_noise_R_ << 0.2*IDEN3x3, ZERO3x3,
-                     ZERO3x3, 2.5*IDEN3x3;
-
-    meas_matrix_C_ << IDEN3x3, ZERO3x3,
-                      ZERO3x3, IDEN3x3;
-    meas_matrix_C_t = meas_matrix_C_.transpose();
-
-    state_cov_P_ = 1*Eigen::MatrixXd::Identity(6,6);
-    
-    // guess some initial state 
-    best_estimate_ << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-    prev_vel1_ << 0.0, 0.0, 0.0;
-    prev_vel2_ << 0.0, 0.0, 0.0;
-  #endif
-  // convenience
-  I9x9 = Eigen::MatrixXd::Identity(9,9); 
-  I6x6 = Eigen::MatrixXd::Identity(6,6);
-  I3x3 = Eigen::MatrixXd::Identity(3,3); 
   timing_matrix_ = Eigen::MatrixXd::Zero(6,3);
-  
+  printf( "LQE init with params: %0.2f, %0.2f, %0.2f, %0.2f -- dt %0.3f: ", m_noise, np, nv, na, dt );
+  std::cout << "done!" << std::endl;
 }
 
+/* State propagation, done at a fixed rate on a separate thread.
+On smaller/less-powerful machines, the thread::sleep_for() methods may not
+be highly accurate, and thus, values of "dt" in A and B matrices can't be 
+assumed to be constant (=1.0/estimator_rate). The function measures the time
+since the propagation uses that for "dt". The time it sleeps for is also
+stabilized by accounting for the time it took to run state propagation.
+*/
 __attribute__((optimize("unroll-loops")))
 void StateEstimator::state_propagation( )
 {
-  while( ros::ok() )
+  while( state_propagation_alive_ )
   {
-    // alternatives to prevent jitter: use cpp-std-thread methods, Orocos, rtt ..
     ts = std::chrono::high_resolution_clock::now();
     prop_interval_ = ts - last_prop_t_;
     double delta_t = prop_interval_.count();
     
-    #if LQE_INTEGRATOR_ORDER_ == 2
-      timing_matrix_ << 0.5*delta_t*delta_t * I3x3,
-                            delta_t * I3x3;
-      sys_A_.block<3,3>(0, 3) = delta_t * I3x3;
-      sys_A_.topRightCorner<6,3>() = timing_matrix_;
-      sys_B_.block<6,3>(0, 0) =  timing_matrix_;
-      
-      sys_A_t_ = sys_A_.transpose();
-    #else
-      sys_A_.block(0, 3, 3, 3) = delta_t * I3x3;
-      sys_B_.block(3, 0, 3, 3) = delta_t * I3x3;
-      sys_A_t_.block(3, 0, 3, 3) = delta_t * I3x3;
-    #endif
+    timing_matrix_ << 0.5*delta_t*delta_t * IDEN3x3,
+                          delta_t * IDEN3x3;
+    sys_A_.block<3,3>(0, 3) = delta_t * IDEN3x3;
+    sys_A_.topRightCorner<6,3>() = timing_matrix_;
+    sys_B_.block<6,3>(0, 0) =  timing_matrix_;
+    
+    sys_A_t_ = sys_A_.transpose();
 
     std::unique_lock<std::mutex> spmtx( state_prop_mutex_, std::defer_lock );
     if( spmtx.try_lock() )
     {
-      // prevent too much artifical feedback
-      n_stprops_since_update_++;
-      double input_shaping_ratio = ((double)n_stprops_since_update_)/n_stprops_allowed_;
-      if( n_stprops_since_update_ > 2 )
-        ctrl_input_u_ << 0.0, 0.0, 0.0;
-
       // propagate state forward
-      best_estimate_ = sys_A_ * best_estimate_ +  sys_B_ * ctrl_input_u_ * input_shaping_ratio;
+      best_estimate_ = sys_A_ * best_estimate_ +  sys_B_ * ctrl_input_u_;
       state_cov_P_ = sys_A_*state_cov_P_*sys_A_t_ + proc_noise_Q_;
 
-      //last_prop_t_ = std::chrono::high_resolution_clock::now();
-
-      // this will be unrolled by gcc
-      for( int idx=0; idx < nStates; idx++ )
-        state_msg_.state_vector[idx] = best_estimate_(idx);
       spmtx.unlock();
 
-      // publish
-      state_msg_.header.stamp = ros::Time::now();
-
       last_prop_t_ = te = std::chrono::high_resolution_clock::now();
-      int dt = std::chrono::duration_cast<std::chrono::microseconds>(te-ts).count();
-      state_msg_.state_vector[9] = n_stprops_since_update_;
-      state_msg_.state_vector[10] = delta_t;
-      state_msg_.state_vector[11] = dt;
-      state_pub_.publish( state_msg_ );
-
-      std::this_thread::sleep_for( std::chrono::microseconds(STPROP_SLEEP_US_ - dt) );
+      int dt = std::chrono::duration_cast<uSeconds>(te-ts).count();
+      std::this_thread::sleep_for( uSeconds(estimator_period_us_ - dt) );
     }
     else
-      std::this_thread::sleep_for( std::chrono::microseconds(STPROP_SLEEP_US_) );
+      std::this_thread::sleep_for( uSeconds(estimator_period_us_) );
   }
 }
 
@@ -219,31 +149,24 @@ void StateEstimator::state_updation()
         P = (I-GC)*P
      If C = I, speed-up/de-clutter the code here.
   */
-  Eigen::MatrixXd innov = ( meas_matrix_C_ * state_cov_P_ * meas_matrix_C_t + meas_noise_R_ ).inverse();
+  Eigen::MatrixXd innov = ( meas_matrix_C_ * state_cov_P_ * meas_matrix_C_t_ + meas_noise_R_ ).inverse();
   state_prop_mutex_.lock();
-    kalman_gain_G_ = state_cov_P_ * meas_matrix_C_t * innov;
+    kalman_gain_G_ = state_cov_P_ * meas_matrix_C_t_ * innov;
     best_estimate_ = best_estimate_ + kalman_gain_G_*(measurement_z_ - meas_matrix_C_*best_estimate_);
-    #if LQE_INTEGRATOR_ORDER_ == 2
-      state_cov_P_ = (I9x9 - kalman_gain_G_*meas_matrix_C_)*state_cov_P_;
-    #else
-      state_cov_P_ = (I6x6 - kalman_gain_G_*meas_matrix_C_)*state_cov_P_;
-    #endif
+    state_cov_P_ = (IDEN9x9 - kalman_gain_G_*meas_matrix_C_)*state_cov_P_;
   state_prop_mutex_.unlock();
 }
 
-void StateEstimator::controlInputCallback( const LqrInputAccel & msg )
+void StateEstimator::setControlInput( const Eigen::Matrix<double, nCtrl, 1> &ctrl_u )
 {
   /* Listening to debug from controller is neat because it contains the raw
      accelerations commanded, and also the feedback linearized attitudes that
      were computed. At the moment, we rely on accelerations, but in the future,
      one could incorporate attitude commands to do more non-linear stuff here.
   */
-
   // note: X = [pn, pe, pd ..]
   state_prop_mutex_.lock();
-    ctrl_input_u_[0] = msg -> lqr_u[0];
-    ctrl_input_u_[1] = msg -> lqr_u[1];
-    ctrl_input_u_[2] = msg -> lqr_u[2] + 9.81;
+    ctrl_input_u_ = std::move(ctrl_u);
     n_stprops_since_update_ = 0;
   state_prop_mutex_.unlock();
 }
@@ -261,31 +184,22 @@ void StateEstimator::medianFilter()
   */
 }
 
-void StateEstimator::stateUpdatesCallback( const freyja_msgs::CurrentState::ConstPtr & msg )
+void StateEstimator::setMeasurementInput( const Eigen::Matrix<double, nMeas, 1> &meas )
 {
 
   // no need to mutexify this, since measurement_z_ is only used in update function
-  const double *msgptr = msg->state_vector.data();
-  std::vector<double> msv( msgptr, msgptr+6  );
-  Eigen::Matrix<double, nMeas, 1> tmp(msv.data());
-  measurement_z_ = tmp;
+  measurement_z_ = std::move(meas);
 
   // call state update, reset propagation counter
-
-    state_updation();
-
-  //n_stprops_since_update_ = 0;
+  state_updation();
+  n_stprops_since_update_ = 0;
 }
 
-
-int main( int argc, char** argv )
+/* Return estimated state 6x1 [posNED, velNED] */
+void StateEstimator::getStateEstimate( Eigen::Matrix<double, 9, 1> &x_est )
 {
-  ros::init( argc, argv, ROS_NODE_NAME );
-  StateEstimator kfilter;
-  
-  ros::MultiThreadedSpinner cbspinner(3);
-  cbspinner.spin();
-  
-  return 0;
+  state_prop_mutex_.lock();
+    x_est = best_estimate_.head<9>();
+  state_prop_mutex_.unlock();
 }
 

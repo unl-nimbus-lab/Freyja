@@ -23,10 +23,16 @@ find_package( std_srvs REQUIRED )
 find_package( tf2 REQUIRED )
 find_package( tf2_ros REQUIRED )
 find_package( tf2_geometry_msgs REQUIRED )
+find_package(Eigen3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIR})
+add_definitions( ${EIGEN3_DEFINITIONS} )
 
 include_directories(include)
+include_directories(
+  ${Eigen_INCLUDE_DIRS}
+)
 
-add_executable(state_manager_node src/state_manager.cpp)
+add_executable(state_manager_node src/state_manager.cpp src/state_estimator.cpp)
 target_include_directories( state_manager_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>

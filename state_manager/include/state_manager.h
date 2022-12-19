@@ -29,6 +29,9 @@
 #include "freyja_msgs/msg/asctec_data.hpp"
 
 #include "freyja_filters.cpp"
+#include "state_estimator.hpp"
+
+#include <eigen3/Eigen/Dense>
 
 typedef geometry_msgs::msg::TransformStamped TFStamped;
 typedef geometry_msgs::msg::TwistStamped TwStamped;
@@ -81,6 +84,8 @@ class StateManager: public rclcpp::Node
   std::string filter_type_;
   FreyjaFilters pose_filter_;
   FreyjaFilters rate_filter_;
+  StateEstimator estimator_;
+  bool use_kf_ = false;
 
   /* tf related */
   std::string tf_base_frame_;

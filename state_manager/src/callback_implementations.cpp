@@ -5,45 +5,62 @@ void StateManager::mocapCallback( const TFStamped::ConstSharedPtr msg )
   
   /* Note that Vicon gives us ENU, while we use NED */
   
+  static CurrentState state_msg;
   double time_since = (now() - lastUpdateTime_).seconds();
-  
-  double x, y, z;
-  x = msg -> transform.translation.y;
-  y = msg -> transform.translation.x;
-  z = -(msg -> transform.translation.z);
+  static Eigen::Matrix<double, 9, 1> best_estimate_;
 
-  prev_pn_.erase( prev_pn_.begin() );
-  prev_pn_.push_back( x );
-  prev_pe_.erase( prev_pe_.begin() );
-  prev_pe_.push_back( y );
-  prev_pd_.erase( prev_pd_.begin() );
-  prev_pd_.push_back( z );
+  if( use_kf_ )
+  {
+    static Eigen::Matrix<double, 3, 1> meas_z_;
 
-  pose_filter_.filterObservations( prev_pn_, prev_pe_, prev_pd_, x, y, z );
+    meas_z_ <<  msg->transform.translation.y,
+                msg->transform.translation.x,
+                -msg->transform.translation.z;
 
-  /* positions */
-  state_vector_[0] = x;
-  state_vector_[1] = y;
-  state_vector_[2] = z;
-  
-  /* velocities */
-  double vx, vy, vz;
-  vx = ( x - last_pn_ )/time_since; //[3]
-  vy = ( y - last_pe_ )/time_since; //[4]
-  vz = ( z - last_pd_ )/time_since;
-  prev_vn_.erase( prev_vn_.begin() );
-  prev_vn_.push_back( vx );
-  prev_ve_.erase( prev_ve_.begin() );
-  prev_ve_.push_back( vy );
-  prev_vd_.erase( prev_vd_.begin() );
-  prev_vd_.push_back( vz );
+    estimator_.setMeasurementInput( meas_z_ );
+    estimator_.getStateEstimate( best_estimate_ );
+    for( int idx=0; idx<6; idx++ )
+      state_vector_[idx] = best_estimate_.coeff(idx);
+  }
+  else
+  {
+    double x, y, z;
+    x = msg -> transform.translation.y;
+    y = msg -> transform.translation.x;
+    z = -(msg -> transform.translation.z);
 
-  rate_filter_.filterObservations( prev_vn_, prev_ve_, prev_vd_, vx, vy, vz );
+    prev_pn_.erase( prev_pn_.begin() );
+    prev_pn_.push_back( x );
+    prev_pe_.erase( prev_pe_.begin() );
+    prev_pe_.push_back( y );
+    prev_pd_.erase( prev_pd_.begin() );
+    prev_pd_.push_back( z );
 
-  state_vector_[3] = vx;
-  state_vector_[4] = vy;
-  state_vector_[5] = vz;
-  
+    pose_filter_.filterObservations( prev_pn_, prev_pe_, prev_pd_, x, y, z );
+
+    /* positions */
+    state_vector_[0] = x;
+    state_vector_[1] = y;
+    state_vector_[2] = z;
+    
+    /* velocities */
+    double vx, vy, vz;
+    vx = ( x - last_pn_ )/time_since; //[3]
+    vy = ( y - last_pe_ )/time_since; //[4]
+    vz = ( z - last_pd_ )/time_since;
+    prev_vn_.erase( prev_vn_.begin() );
+    prev_vn_.push_back( vx );
+    prev_ve_.erase( prev_ve_.begin() );
+    prev_ve_.push_back( vy );
+    prev_vd_.erase( prev_vd_.begin() );
+    prev_vd_.push_back( vz );
+
+    rate_filter_.filterObservations( prev_vn_, prev_ve_, prev_vd_, vx, vy, vz );
+
+    state_vector_[3] = vx;
+    state_vector_[4] = vy;
+    state_vector_[5] = vz;
+  }
   /* rpy */
   tf2::Quaternion q;
   double roll, pitch, yaw;
@@ -61,9 +78,9 @@ void StateManager::mocapCallback( const TFStamped::ConstSharedPtr msg )
 
   
   /* rpy rates (no filter yet, use with caution!) */
-  state_vector_[9] = ( roll - last_roll_ )/time_since;
-  state_vector_[10] = ( pitch - last_pitch_ )/time_since;
-  state_vector_[11] = std::fmod( (yaw - last_yaw_)/time_since, 2*F_PI );
+  state_vector_[9] = best_estimate_.coeff(6);    //  ( roll - last_roll_ )/time_since;
+  state_vector_[10] = best_estimate_.coeff(7);   //  ( pitch - last_pitch_ )/time_since;
+  state_vector_[11] = best_estimate_.coeff(8);   //  std::fmod( (yaw - last_yaw_)/time_since, 2*F_PI );
   
   /* age of this data */
   state_vector_[12] = time_since;
@@ -78,12 +95,13 @@ void StateManager::mocapCallback( const TFStamped::ConstSharedPtr msg )
   last_roll_ = roll;
   last_pitch_ = pitch;
   last_yaw_ = yaw;
-  
-  /* Copy over and publish right away */
-  static CurrentState state_msg;
-  state_msg.header.stamp = now();
+
   for( uint8_t idx = 0; idx < STATE_VECTOR_LEN; idx++ )
     state_msg.state_vector[idx] = state_vector_[idx];
+  
+  
+  /* Copy over and publish right away */
+  state_msg.header.stamp = now();
   state_pub_ -> publish( state_msg );
 }
 
