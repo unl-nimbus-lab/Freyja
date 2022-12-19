@@ -11,5 +11,6 @@ uint8   MASS_CR = 8
 std_msgs/Header header
 float32[4]  lqr_u
 float32[4]  biasv
+float32[4]  ext_f
 float32[7]  errv
 uint8       flags

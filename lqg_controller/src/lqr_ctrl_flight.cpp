@@ -26,6 +26,7 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   declare_parameter<bool>( "mass_correction", false );
   declare_parameter<bool>( "mass_estimation", true );
   declare_parameter<std::string>( "bias_compensation", "auto" );
+  declare_parameter<bool>( "apply_est_biases", false );
 
   declare_parameter<std::string>( "controller_type", "pos-vel" );
   
@@ -43,7 +44,10 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
                   std::bind(&LQRController::stateCallback, this, _1) );
   /* Associate a subscriber for the current reference state */
   reference_sub_ = create_subscription<TrajRef>( "reference_state", 1,
-    std::bind(&LQRController::trajectoryReferenceCallback, this, _1) );
+                  std::bind(&LQRController::trajectoryReferenceCallback, this, _1) );
+  /* Associate a subscriber for measured external forces */
+  extf_sub_ = create_subscription<GeomVec3Stamped>( "pred_ext_forces", 1,
+                  std::bind(&LQRController::externalForceCallback, this, _1) );
   
   /* Service provider for bias compensation */
   bias_enable_serv_ = create_service <BoolServ> ( "set_bias_compensation",
@@ -79,6 +83,7 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   bias_compensation_off_ = (_bcomp == "always-off")? true : false;   // always off
   
   f_biases_ << 0.0, 0.0, 0.0;
+  get_parameter( "apply_est_biases", apply_bias_corr_ );
   
   /* Differential flatness feed-forward accelerations */
   get_parameter( "enable_flatness_ff", enable_flatness_ff_ );
@@ -234,6 +239,11 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstSharedPtr m
   have_reference_update_ = true;
 }
 
+void LQRController::externalForceCallback( const GeomVec3Stamped::ConstSharedPtr msg )
+{
+  f_ext_ << msg->vector.x, msg->vector.y, msg->vector.z;
+}
+
 __attribute__((optimize("unroll-loops")))
 void LQRController::computeFeedback( )
 {
@@ -274,7 +284,7 @@ void LQRController::computeFeedback( )
     if( bias_compensation_req_ )
     {
       bias_est_.getEstimatedBiases( f_biases_ );
-      control_input.head<3>() -= f_biases_.head<3>();
+      control_input.head<3>() -= (apply_bias_corr_ * f_biases_.head<3>() );
     }
   
     /* Thrust */
@@ -309,11 +319,13 @@ void LQRController::computeFeedback( )
   static CTRL_Debug debug_msg;
   debug_msg.header.stamp = tnow;
   for( uint8_t idx=0; idx<4; idx++ )
-    debug_msg.lqr_u[idx] = static_cast<float>(control_input(idx));
+    debug_msg.lqr_u[idx] = static_cast<float>(control_input.coeff(idx));
   for( uint8_t idx=0; idx<3; idx++ )
-    debug_msg.biasv[idx] = static_cast<float>(f_biases_(idx));
+    debug_msg.biasv[idx] = static_cast<float>(f_biases_.coeff(idx));
+  for( uint8_t idx=0; idx<3; idx++ )
+    debug_msg.ext_f[idx] = static_cast<float>(f_ext_.coeff(idx));
   for( uint8_t idx=0; idx<7; idx++ )
-    debug_msg.errv[idx] = static_cast<float>(state_err(idx));
+    debug_msg.errv[idx] = static_cast<float>(state_err.coeff(idx));
 
   debug_msg.flags = (debug_msg.BIAS_EN * bias_compensation_req_) |
                     (debug_msg.MASS_CR * enable_dyn_mass_correction_ ) |

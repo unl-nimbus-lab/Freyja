@@ -17,7 +17,7 @@
 #include <chrono>
 
 #include "rclcpp/rclcpp.hpp"
-//#include "geometry_msgs/msg/TransformStamped.hpp"
+#include "geometry_msgs/msg/vector3_stamped.hpp"
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_msgs/msg/float32.hpp"
 
@@ -30,11 +30,12 @@
 
 #include "bias_estimator.h"
 
-typedef freyja_msgs::msg::ReferenceState TrajRef;
-typedef freyja_msgs::msg::CurrentState CurrentState;
-typedef std_srvs::srv::SetBool BoolServ;
-typedef freyja_msgs::msg::CtrlCommand RPYT_Command;
-typedef freyja_msgs::msg::ControllerDebug CTRL_Debug;
+typedef freyja_msgs::msg::ReferenceState      TrajRef;
+typedef freyja_msgs::msg::CurrentState        CurrentState;
+typedef std_srvs::srv::SetBool                BoolServ;
+typedef freyja_msgs::msg::CtrlCommand         RPYT_Command;
+typedef freyja_msgs::msg::ControllerDebug     CTRL_Debug;
+typedef geometry_msgs::msg::Vector3Stamped    GeomVec3Stamped;
 
 typedef Eigen::Matrix<double, 6, 1> PosVelNED;
 typedef Eigen::Matrix<double, 4, 1> Vector4d;
@@ -79,8 +80,13 @@ class LQRController : public rclcpp::Node
   BiasEstimator &bias_est_;
   bool bias_compensation_req_;
   bool bias_compensation_off_;
+  bool apply_bias_corr_;
   Eigen::Matrix<double, 3, 1> f_biases_;
   std::thread bias_handler_thread_;
+
+  /* External forces estimate */
+  Eigen::Vector3d f_ext_;
+  bool correct_ext_forces_;
   
   /*Dynamic mass estimation and compensation */
   bool enable_dyn_mass_correction_;
@@ -105,6 +111,9 @@ class LQRController : public rclcpp::Node
     
     rclcpp::Subscription<TrajRef>::SharedPtr reference_sub_;
     void trajectoryReferenceCallback( const TrajRef::ConstSharedPtr );
+
+    rclcpp::Subscription<GeomVec3Stamped>::SharedPtr extf_sub_;
+    void externalForceCallback( const GeomVec3Stamped::ConstSharedPtr );
 
     /* helper function to calculate yaw error */
     static constexpr inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
