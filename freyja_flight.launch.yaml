@@ -44,6 +44,7 @@ launch:
       - { name:   "estimator_rate",     value:  20 }
       - { name:   "bias_compensation",  value:  "$(var bias_compensation)" }
       - { name:   "apply_est_biases",   value:  true }
+      - { name:   "apply_extf_corr",    value:  false }
       - { name:   "controller_type",    value:  "$(var controller_type)" }
       - { name:   "enable_flatness_ff", value:  "$(var flatness_ff)" }
       remap:

@@ -86,7 +86,7 @@ class LQRController : public rclcpp::Node
 
   /* External forces estimate */
   Eigen::Vector3d f_ext_;
-  bool correct_ext_forces_;
+  bool apply_extf_corr_;
   
   /*Dynamic mass estimation and compensation */
   bool enable_dyn_mass_correction_;

@@ -27,6 +27,7 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   declare_parameter<bool>( "mass_estimation", true );
   declare_parameter<std::string>( "bias_compensation", "auto" );
   declare_parameter<bool>( "apply_est_biases", false );
+  declare_parameter<bool>( "apply_extf_corr", false );
 
   declare_parameter<std::string>( "controller_type", "pos-vel" );
   
@@ -82,12 +83,16 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   
   bias_compensation_off_ = (_bcomp == "always-off")? true : false;   // always off
   
-  f_biases_ << 0.0, 0.0, 0.0;
+  f_biases_.setZero();
   get_parameter( "apply_est_biases", apply_bias_corr_ );
+
+  /* Should we apply external forces provided to controller */
+  get_parameter( "apply_extf_corr", apply_extf_corr_ );
+  f_ext_.setZero();
   
   /* Differential flatness feed-forward accelerations */
   get_parameter( "enable_flatness_ff", enable_flatness_ff_ );
-  reference_ff_ << 0.0, 0.0, 0.0, 0.0;
+  reference_ff_.setZero();
   
   
   /* Mass estimation */
@@ -286,6 +291,9 @@ void LQRController::computeFeedback( )
       bias_est_.getEstimatedBiases( f_biases_ );
       control_input.head<3>() -= (apply_bias_corr_ * f_biases_.head<3>() );
     }
+
+    /* Correct for external forces */
+    control_input.head<3>() -= (apply_extf_corr_ * f_ext_.head<3>() );
   
     /* Thrust */
     T = total_mass_ * control_input.head<3>().norm();
