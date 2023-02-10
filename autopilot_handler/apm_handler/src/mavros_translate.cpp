@@ -21,9 +21,13 @@
 #include "geometry_msgs/msg/quaternion.hpp"
 
 #include "std_srvs/srv/set_bool.hpp"
+#include "sensor_msgs/msg/battery_state.hpp"
 
 #include "freyja_msgs/msg/ctrl_command.hpp"
 #include "freyja_msgs/msg/freyja_internal_status.hpp"
+
+#include <eigen3/Eigen/Dense>
+#include <eigen3/unsupported/Eigen/Polynomials>
 
 typedef freyja_msgs::msg::FreyjaInternalStatus FreyjaIntStatus;
 
@@ -40,17 +44,95 @@ double THRUST_MAX = 1.0;
 double THRUST_MIN = -1.0; //0.02;
 double THRUST_SCALER = 200.0;
 
-typedef mavros_msgs::msg::AttitudeTarget AttiTarget;
-typedef freyja_msgs::msg::CtrlCommand    CtrlCommand;
-typedef mavros_msgs::msg::State          MavState;
-typedef mavros_msgs::msg::RCIn           RCInput;
-typedef std_srvs::srv::SetBool		 BoolServ;
+typedef mavros_msgs::msg::AttitudeTarget  AttiTarget;
+typedef freyja_msgs::msg::CtrlCommand     CtrlCommand;
+typedef mavros_msgs::msg::State           MavState;
+typedef mavros_msgs::msg::RCIn            RCInput;
+typedef sensor_msgs::msg::BatteryState    Battery;
+typedef std_srvs::srv::SetBool		        BoolServ;
+typedef Eigen::Matrix<double,1,3>         RowVector3d;
 using std::placeholders::_1;
 using std::placeholders::_2;
 
 uint8_t ignore_rates = AttiTarget::IGNORE_ROLL_RATE |
                        AttiTarget::IGNORE_PITCH_RATE; // |
                         //AttiTarget::IGNORE_YAW_RATE;
+
+
+class ThrustCalibration
+{
+  RowVector3d A_, B_;
+  double Const_;
+  std::function<RowVector3d(double)> Bprime_;
+  std::function<double(double)> volt_normed_;
+  std::function<double(double)> throttle_normed_;
+  std::function<double(double)> throttle_unnormed_;
+  std::function<double(double,double)> getExpectedThrust_;
+
+  Eigen::PolynomialSolver<double, 3> rootSolver_;
+
+  double THRUST_TOL;
+  double batt_volt_normed_;
+  double calib_throttle_;       // final output, in range [0..1]
+  public:
+    /*
+      v_normed = @(v) (v - 1486)/113.3;
+      t_normed = @(t) (t - 0.14)/0.1207;
+      t_unnormed = @(t) t*0.1207 + 0.14;
+      getExpectedThrust = @(v,t) A*[v;v.^2;v.^3] + Bp(v)*[t;t.^2;t.^3] + 224.2 ;
+      Bp = @(v) B + [18.109*v+0.5573*v.^2, -1.207, 0];
+    */
+    ThrustCalibration()
+    { 
+      THRUST_TOL = 20.0;       // allowed error in reprojected thrust
+      A_ << 18.0248,  0.374, 4.081;
+      B_ << 141.8474, -5.12, -0.7644;
+      Const_ = 224.1938;
+      volt_normed_ = [](const double &v){ return (v-1486)/113.3; };
+      throttle_normed_ = [](const double &t){ return (t-0.14)/0.1207; };
+      throttle_unnormed_ = [](const double &t){ return t*0.1207 + 0.14; };
+      
+      Bprime_ = [this](const double &v)
+                { return B_ + Eigen::Matrix<double,1,3>(18.109*v +0.5573*v*v, -1.207,0); };
+      getExpectedThrust_ = [this](const double &v, const double &t)
+                          { 
+                            double thr1 = A_*Eigen::Vector3d(v, v*v, v*v*v);
+                            double thr2 = Bprime_(v)*Eigen::Vector3d(t, t*t, t*t*t);
+                            return thr1 + thr2 + Const_;
+                          };
+    }
+
+    double calibThrustFromNewtons( const double &req_thrust )
+    {
+      static Eigen::Matrix<double,4,1> coeffs;
+      
+      const double &v = batt_volt_normed_;
+      double C = req_thrust - Const_ - A_*Eigen::Matrix<double,3,1>(v, v*v, v*v*v);
+      coeffs << -C, Bprime_(v).transpose();
+
+      // smallest root of this polyn is the required throttle (pre-normalised)
+      bool root_found = false;
+      rootSolver_.compute( coeffs );
+      double thr = rootSolver_.absSmallestRealRoot(root_found, 0.1);
+      // do sanity check: what thrust do we expect to get from this throttle?
+      double exp_thrust = getExpectedThrust_( v, thr );
+
+      if( root_found && std::fabs( exp_thrust - req_thrust ) < THRUST_TOL )
+      {
+        // undo normalisation
+        calib_throttle_ = 4.0*throttle_unnormed_( thr );
+      }
+      else
+      {
+        // our solution is not acceptable, stick to something basic
+        calib_throttle_ = req_thrust/THRUST_SCALER;
+      }
+      return calib_throttle_;
+    }
+
+    void setBatteryVoltage100( const double &v )
+    { batt_volt_normed_ = volt_normed_(v); }
+};
 
 
 class MavrosHandler : public rclcpp::Node
@@ -60,6 +142,9 @@ class MavrosHandler : public rclcpp::Node
   std::string computer_mode_name_;
 
   FreyjaIntStatus fstatus_;
+
+  bool use_thrust_calib_;
+  ThrustCalibration thrust_calib_;
 
   public:
     MavrosHandler();
@@ -78,6 +163,8 @@ class MavrosHandler : public rclcpp::Node
 
     rclcpp::Subscription<RCInput>::SharedPtr rcInput_sub_;
     void mavrosRCCallback( const RCInput::ConstSharedPtr );
+
+    rclcpp::Subscription<Battery>::SharedPtr battery_sub_;
 
     rclcpp::Client<BoolServ>::SharedPtr map_lock_;
     rclcpp::Client<BoolServ>::SharedPtr bias_comp_;
@@ -104,7 +191,10 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   computer_mode_name_ = "GUIDED_NOGPS";
 
   declare_parameter<double>( "thrust_scaler", 200.0 );
+  declare_parameter<bool>( "use_thrust_calib", false );
+
   get_parameter( "thrust_scaler", THRUST_SCALER );
+  get_parameter( "use_thrust_calib", use_thrust_calib_ );
 
   ctrlCmd_sub_ = create_subscription <CtrlCommand> ( "rpyt_command", 1,
                           std::bind( &MavrosHandler::rpytCommandCallback, this, _1 ) );
@@ -112,6 +202,9 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
                           std::bind( &MavrosHandler::mavrosStateCallback, this, _1 ) );
   rcInput_sub_ = create_subscription <RCInput> ( "mavros/rc/in", 1, 
                           std::bind( &MavrosHandler::mavrosRCCallback, this, _1 ) );
+  battery_sub_ = create_subscription <Battery> ( "mavros/battery", 1, 
+                          [this](const Battery::ConstSharedPtr msg)
+                          { thrust_calib_.setBatteryVoltage100( msg->voltage ); } );
   
   map_lock_ = create_client <BoolServ> ("lock_arming_mapframe" );
   bias_comp_ = create_client <BoolServ> ( "set_auto_biascomp" );
@@ -139,16 +232,17 @@ void MavrosHandler::rpytCommandCallback( const CtrlCommand::ConstSharedPtr msg )
   
   /* map angles into -1..+1 -- some systems might need this */
   //anglesToDouble( tgt_roll, tgt_pitch, tgt_yawrate );
-  
-  /* map thrust into 0..1 */
-  thrustToDouble( tgt_thrust );
+
+  if( use_thrust_calib_ )
+    tgt_thrust = thrust_calib_.calibThrustFromNewtons( tgt_thrust );
+  else
+    thrustToDouble( tgt_thrust );
   
   /* clip to hard limits */
   tgt_pitch = std::max( -1.0, std::min( 1.0, tgt_pitch ) );
   tgt_roll = std::max( -1.0, std::min( 1.0, tgt_roll ) );
   tgt_yawrate = std::max( -45.0, std::min( 45.0, tgt_yawrate ) );
   tgt_thrust = std::max( THRUST_MIN, std::min( THRUST_MAX, tgt_thrust ) );
-  
   /* call mavros helper function */
   sendToMavros( tgt_pitch, tgt_roll, tgt_yawrate, tgt_thrust );
 }
