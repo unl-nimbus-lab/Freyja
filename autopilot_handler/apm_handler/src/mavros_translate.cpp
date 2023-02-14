@@ -29,7 +29,7 @@
 #include <eigen3/Eigen/Dense>
 #include <eigen3/unsupported/Eigen/Polynomials>
 
-typedef freyja_msgs::msg::FreyjaInternalStatus FreyjaIntStatus;
+typedef freyja_msgs::msg::FreyjaInterfaceStatus FreyjaIntStatus;
 
 #define PITCH_MAX 0.785398
 #define PITCH_MIN -0.785398

@@ -21,7 +21,7 @@
 
 #include "eigen3/Eigen/Dense"
 
-typedef freyja_msgs::msg::FreyjaInternalStatus  FreyjaIntStatus;
+typedef freyja_msgs::msg::FreyjaInterfaceStatus  FreyjaIntStatus;
 typedef freyja_msgs::msg::CurrentState          CurrentState;
 typedef freyja_msgs::msg::ReferenceState        ReferenceState;
 typedef mavros_msgs::srv::CommandBool           MavrosArming;
