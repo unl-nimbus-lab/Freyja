@@ -29,12 +29,13 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
                             std::bind(&ApmModeArbitrator::currentStateCallback,this,_1) );
   tgtstate_sub_ = create_subscription<ReferenceState>( "target_state", 1,
                             std::bind(&ApmModeArbitrator::targetStateCallback, this,_1) );                            
-  fstatus_sub_ = create_subscription<FreyjaIntStatus>( "freyja_internal_status", 1,
+  fstatus_sub_ = create_subscription<FreyjaIfaceStatus>( "freyja_internal_status", 1,
                             std::bind(&ApmModeArbitrator::freyjaStatusCallback, this,_1) );
   refstate_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );                            
 
   arming_client_ = create_client<MavrosArming> ("mavros/cmd/arming" );
   biasreq_client_ = create_client<BoolServ> ("set_bias_compensation" );
+  extfcorr_client_ = create_client<BoolServ> ("set_extf_correction");
 
   elanding_serv_ = create_service<Trigger>( "blind_software_landing",
                             std::bind(&ApmModeArbitrator::eLandingServiceHandler, this, _1, _2) );
@@ -80,7 +81,7 @@ void ApmModeArbitrator::eLandingServiceHandler( const Trigger::Request::SharedPt
   rp->success = true;
 }
 
-void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIntStatus::ConstSharedPtr msg )
+void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIfaceStatus::ConstSharedPtr msg )
 {
   /* msg contains vehicle mode, armed?, and rcdata */
   static int skip_initial_msgs = 0;
@@ -118,6 +119,17 @@ void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIntStatus::ConstShared
   {
     vehicle_mode_ = VehicleMode::ARMED_NOCOMP;
     mission_mode_ = MissionMode::PENDING_PILOT;
+  }
+
+  // handle aux data
+  static bool extf_state = false;
+  if( extf_state != msg->aux4 )
+  {
+    // rc state has changed
+    auto extf_req = std::make_shared<BoolServ::Request> ();
+    extf_req -> data = msg->aux4;
+    extfcorr_client_ -> async_send_request( extf_req );
+    extf_state = msg->aux4;
   }
 }
 
@@ -199,7 +211,7 @@ void ApmModeArbitrator::manager()
       {
         // wait here until a target_state is available (from policy/rvo3 etc)
         if( target_state_avail_ )
-          mission_mode_ = MissionMode::POLICY_EXEC;
+          mission_mode_ = MissionMode::MISSION_EXEC;
 
         // publish zero velocities; positions are captured at other places
         manager_refstate_.vn = manager_refstate_.ve = manager_refstate_.vd = 0.0;
@@ -243,7 +255,7 @@ void ApmModeArbitrator::manager()
         break;
       }
 
-    case MissionMode::POLICY_EXEC :
+    case MissionMode::MISSION_EXEC :
       {
         // here we simply forward incoming reference state to controller
         forward_ref_state_ = true;
@@ -256,6 +268,9 @@ void ApmModeArbitrator::manager()
           mission_mode_ = MissionMode::HOVERING;
           target_state_avail_ = false;
         }
+        
+        // handle other custom events from RC switches
+        processRCEvents();
         break;
       }
   }
@@ -263,6 +278,11 @@ void ApmModeArbitrator::manager()
   RCLCPP_INFO_THROTTLE( get_logger(), *(get_clock()), 1000,
                         "Mission Mode: %s", MissionModeName[(int)mission_mode_] );
 
+}
+
+void ApmModeArbitrator::processRCEvents()
+{
+  
 }
 
 int main( int argc, char** argv )

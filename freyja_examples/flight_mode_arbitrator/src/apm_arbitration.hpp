@@ -15,13 +15,13 @@
 #include "std_srvs/srv/trigger.hpp"
 
 #include "freyja_msgs/msg/ctrl_command.hpp"
-#include "freyja_msgs/msg/freyja_internal_status.hpp"
+#include "freyja_msgs/msg/freyja_interface_status.hpp"
 #include "freyja_msgs/msg/current_state.hpp"
 #include "freyja_msgs/msg/reference_state.hpp"
 
 #include "eigen3/Eigen/Dense"
 
-typedef freyja_msgs::msg::FreyjaInterfaceStatus  FreyjaIntStatus;
+typedef freyja_msgs::msg::FreyjaInterfaceStatus FreyjaIfaceStatus;
 typedef freyja_msgs::msg::CurrentState          CurrentState;
 typedef freyja_msgs::msg::ReferenceState        ReferenceState;
 typedef mavros_msgs::srv::CommandBool           MavrosArming;
@@ -62,7 +62,7 @@ using std::placeholders::_2;
   OP(TAKING_OFF) \
   OP(HOVERING) \
   OP(E_LANDING) \
-  OP(POLICY_EXEC) \
+  OP(MISSION_EXEC) \
   OP(MISSION_END)
 
 #define MAKE_ENUM(OP) OP,
@@ -102,6 +102,8 @@ class ApmModeArbitrator : public rclcpp::Node
   float t_comp_armed_;
   float t_tgtstate_update_;
   rclcpp::Time t_manager_init_;
+
+  bool rc_aux_switches_[4];
   
   float arbitrator_rate_;
   rclcpp::TimerBase::SharedPtr manager_timer_;
@@ -114,8 +116,8 @@ class ApmModeArbitrator : public rclcpp::Node
     ApmModeArbitrator();
     void manager();
 
-    rclcpp::Subscription<FreyjaIntStatus>::SharedPtr fstatus_sub_;
-    void freyjaStatusCallback( const FreyjaIntStatus::ConstSharedPtr );
+    rclcpp::Subscription<FreyjaIfaceStatus>::SharedPtr fstatus_sub_;
+    void freyjaStatusCallback( const FreyjaIfaceStatus::ConstSharedPtr );
 
     rclcpp::Subscription<CurrentState>::SharedPtr curstate_sub_;
     inline void currentStateCallback( const CurrentState::ConstSharedPtr msg )
@@ -126,6 +128,7 @@ class ApmModeArbitrator : public rclcpp::Node
 
     rclcpp::Client<MavrosArming>::SharedPtr arming_client_;
     rclcpp::Client<BoolServ>::SharedPtr biasreq_client_;
+    rclcpp::Client<BoolServ>::SharedPtr extfcorr_client_;
 
     rclcpp::Publisher<ReferenceState>::SharedPtr refstate_pub_;
 
@@ -140,4 +143,6 @@ class ApmModeArbitrator : public rclcpp::Node
       manager_refstate_.pd = ned(2);
       manager_refstate_.yaw = ned(3);
     }
+
+    void processRCEvents();
 };

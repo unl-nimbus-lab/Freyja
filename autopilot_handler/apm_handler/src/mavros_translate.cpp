@@ -14,6 +14,7 @@
 #include "mavros_msgs/msg/attitude_target.hpp"
 #include "mavros_msgs/msg/state.hpp"
 #include "mavros_msgs/msg/rc_in.hpp"
+#include "mavros_msgs/msg/rtk_baseline.hpp"
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/impl/utils.h>
@@ -22,14 +23,13 @@
 
 #include "std_srvs/srv/set_bool.hpp"
 #include "sensor_msgs/msg/battery_state.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 
 #include "freyja_msgs/msg/ctrl_command.hpp"
-#include "freyja_msgs/msg/freyja_internal_status.hpp"
+#include "freyja_msgs/msg/freyja_interface_status.hpp"
 
 #include <eigen3/Eigen/Dense>
 #include <eigen3/unsupported/Eigen/Polynomials>
-
-typedef freyja_msgs::msg::FreyjaInterfaceStatus FreyjaIntStatus;
 
 #define PITCH_MAX 0.785398
 #define PITCH_MIN -0.785398
@@ -45,12 +45,19 @@ double THRUST_MIN = -1.0; //0.02;
 double THRUST_SCALER = 200.0;
 
 typedef mavros_msgs::msg::AttitudeTarget  AttiTarget;
-typedef freyja_msgs::msg::CtrlCommand     CtrlCommand;
 typedef mavros_msgs::msg::State           MavState;
 typedef mavros_msgs::msg::RCIn            RCInput;
+typedef mavros_msgs::msg::RTKBaseline     RTKBaseline;
+
 typedef sensor_msgs::msg::BatteryState    Battery;
 typedef std_srvs::srv::SetBool		        BoolServ;
+typedef geometry_msgs::msg::Vector3       GeomVec3;
+
+typedef freyja_msgs::msg::FreyjaInterfaceStatus   FreyjaIfaceStatus;
+typedef freyja_msgs::msg::CtrlCommand             CtrlCommand;
+
 typedef Eigen::Matrix<double,1,3>         RowVector3d;
+
 using std::placeholders::_1;
 using std::placeholders::_2;
 
@@ -141,17 +148,19 @@ class MavrosHandler : public rclcpp::Node
   bool in_computer_mode_;
   std::string computer_mode_name_;
 
-  FreyjaIntStatus fstatus_;
+  FreyjaIfaceStatus fstatus_;
 
   bool use_thrust_calib_;
   ThrustCalibration thrust_calib_;
+
+  GeomVec3 baseline_msg_;
 
   public:
     MavrosHandler();
 
     rclcpp::Publisher<AttiTarget>::SharedPtr atti_pub_;
 
-    rclcpp::Publisher<FreyjaIntStatus>::SharedPtr fstatus_pub_;
+    rclcpp::Publisher<FreyjaIfaceStatus>::SharedPtr fstatus_pub_;
     void status_publisher();
     rclcpp::TimerBase::SharedPtr status_timer_;
 
@@ -163,6 +172,9 @@ class MavrosHandler : public rclcpp::Node
 
     rclcpp::Subscription<RCInput>::SharedPtr rcInput_sub_;
     void mavrosRCCallback( const RCInput::ConstSharedPtr );
+
+    rclcpp::Subscription<RTKBaseline>::SharedPtr rtk_sub_;
+    rclcpp::Publisher<GeomVec3>::SharedPtr baseline_pub_;
 
     rclcpp::Subscription<Battery>::SharedPtr battery_sub_;
 
@@ -196,22 +208,34 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   get_parameter( "thrust_scaler", THRUST_SCALER );
   get_parameter( "use_thrust_calib", use_thrust_calib_ );
 
-  ctrlCmd_sub_ = create_subscription <CtrlCommand> ( "rpyt_command", 1,
-                          std::bind( &MavrosHandler::rpytCommandCallback, this, _1 ) );
-  mavState_sub_ = create_subscription <MavState> ( "mavros/state", qos,
-                          std::bind( &MavrosHandler::mavrosStateCallback, this, _1 ) );
-  rcInput_sub_ = create_subscription <RCInput> ( "mavros/rc/in", 1, 
-                          std::bind( &MavrosHandler::mavrosRCCallback, this, _1 ) );
-  battery_sub_ = create_subscription <Battery> ( "mavros/battery", 1, 
-                          [this](const Battery::ConstSharedPtr msg)
-                          { thrust_calib_.setBatteryVoltage100( msg->voltage ); } );
-  
+  // declare publishers and clients before subscribers
   map_lock_ = create_client <BoolServ> ("lock_arming_mapframe" );
   bias_comp_ = create_client <BoolServ> ( "set_auto_biascomp" );
 
   atti_pub_ = create_publisher <AttiTarget> ( "mavros/setpoint_raw/attitude", 1 );
-  fstatus_pub_ = create_publisher <FreyjaIntStatus> ( "freyja_internal_status", 1 );
+  fstatus_pub_ = create_publisher <FreyjaIfaceStatus> ( "freyja_interface_status", 1 );
+  baseline_pub_ = create_publisher <GeomVec3> ( "ublox_f9p_rtkbaseline", 1 );
 
+  // create subscribers
+  ctrlCmd_sub_  = create_subscription <CtrlCommand> ( "rpyt_command", 1,
+                          std::bind( &MavrosHandler::rpytCommandCallback, this, _1 ) );
+  mavState_sub_ = create_subscription <MavState> ( "mavros/state", qos,
+                          std::bind( &MavrosHandler::mavrosStateCallback, this, _1 ) );
+  rcInput_sub_  = create_subscription <RCInput> ( "mavros/rc/in", 1, 
+                          std::bind( &MavrosHandler::mavrosRCCallback, this, _1 ) );
+  battery_sub_  = create_subscription <Battery> ( "mavros/battery", 1, 
+                          [this](const Battery::ConstSharedPtr msg)
+                          { thrust_calib_.setBatteryVoltage100( msg->voltage ); } );
+  rtk_sub_      = create_subscription <RTKBaseline> ( "mavros/rtk_baseline", 1, 
+                          [this](const RTKBaseline::ConstSharedPtr msg)
+                          { 
+                            baseline_msg_.x = msg->baseline_a_mm/1000.0;
+                            baseline_msg_.y = msg->baseline_b_mm/1000.0;
+                            baseline_msg_.z = msg->baseline_c_mm/1000.0;
+                            baseline_pub_ -> publish( baseline_msg_ );
+                          } );
+  
+  // now we can create fixed-rate timers and other processing code
   float status_pubrate = 5.0;     // Hz
   status_timer_ = rclcpp::create_timer( this, get_clock(),
                           std::chrono::duration<float>(1.0/status_pubrate),
@@ -325,6 +349,7 @@ void MavrosHandler::mavrosRCCallback( const RCInput::ConstSharedPtr msg )
   }
   
   */
+  static bool extf_state = false;
   if( (msg->channels).size() < 2 )
     return;
 
