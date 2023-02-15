@@ -7,6 +7,7 @@ uint8   CTRL_OK = 1
 uint8   BIAS_EN = 2
 uint8   FLAT_FF = 4
 uint8   MASS_CR = 8
+uint8   EXTF_CR = 16
 
 std_msgs/Header header
 float32[4]  lqr_u

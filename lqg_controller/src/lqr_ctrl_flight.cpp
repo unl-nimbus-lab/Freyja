@@ -53,6 +53,9 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   /* Service provider for bias compensation */
   bias_enable_serv_ = create_service <BoolServ> ( "set_bias_compensation",
                   std::bind(&LQRController::biasEnableServer, this, _1, _2 ) );
+  /* Service provider for extf correction */
+  extf_enable_serv_ = create_service <BoolServ> ( "set_extf_correction",
+                  std::bind(&LQRController::extfEnableServer, this, _1, _2 ) );
   
   
   /* Announce publishers for controller output */
@@ -183,6 +186,14 @@ void LQRController::biasEnableServer( const BoolServ::Request::SharedPtr rq,
     RCLCPP_WARN( get_logger(), "LQR: Bias compensation inactive!" );
     bias_est_.disable();
   }
+  rp -> success = true;  // service successful
+}
+
+void LQRController::extfEnableServer( const BoolServ::Request::SharedPtr rq,
+                                      const BoolServ::Response::SharedPtr rp )
+{
+  apply_extf_corr_ = rq -> data;
+  RCLCPP_WARN( get_logger(), "Correcting external forces: %d", apply_extf_corr_ );
   rp -> success = true;  // service successful
 }
 
@@ -335,7 +346,8 @@ void LQRController::computeFeedback( )
   for( uint8_t idx=0; idx<7; idx++ )
     debug_msg.errv[idx] = static_cast<float>(state_err.coeff(idx));
 
-  debug_msg.flags = (debug_msg.BIAS_EN * bias_compensation_req_) |
+  debug_msg.flags = (debug_msg.EXTF_CR * apply_extf_corr_) |
+                    (debug_msg.BIAS_EN * bias_compensation_req_) |
                     (debug_msg.MASS_CR * enable_dyn_mass_correction_ ) |
                     (debug_msg.FLAT_FF * enable_flatness_ff_ ) |
                     (debug_msg.CTRL_OK * state_valid );

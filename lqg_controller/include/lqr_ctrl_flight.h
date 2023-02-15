@@ -103,6 +103,10 @@ class LQRController : public rclcpp::Node
     void biasEnableServer( const BoolServ::Request::SharedPtr,
                            const BoolServ::Response::SharedPtr );
     
+    rclcpp::Service<BoolServ>::SharedPtr extf_enable_serv_;
+    void extfEnableServer( const BoolServ::Request::SharedPtr,
+                           const BoolServ::Response::SharedPtr );
+    
     rclcpp::Publisher<RPYT_Command>::SharedPtr atti_cmd_pub_;
     rclcpp::Publisher<CTRL_Debug>::SharedPtr controller_debug_pub_;
     
