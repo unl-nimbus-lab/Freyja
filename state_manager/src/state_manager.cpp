@@ -140,6 +140,8 @@ void StateManager::initTfManager()
 
 void StateManager::initPixhawkManager()
 {
+  declare_parameter<bool> ( "use_rtkbaseframe", false );
+  get_parameter( "use_rtkbaseframe", use_rtkbaseframe_ );
   have_arming_origin_ = false;
   // mavros_gpsraw_sub_ = create_subscription( "/mavros/global_position/global", 1,
   //                               std::bind(&StateManager::mavrosGpsRawCallback, this, _1 );

@@ -52,6 +52,7 @@ class LQRController : public rclcpp::Node
   Eigen::Matrix<double, 7, 1> reference_state_;
   Eigen::Matrix<double, 4, 1> reference_ff_;
   bool enable_flatness_ff_;
+  double flatness_ff_factor_;
   
   /* Rate of execution for LQR's feedback */
   int controller_rate_;

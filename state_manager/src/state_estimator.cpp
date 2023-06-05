@@ -115,11 +115,15 @@ void StateEstimator::state_propagation( )
     prop_interval_ = ts - last_prop_t_;
     double delta_t = prop_interval_.count();
     
+    /*
     timing_matrix_ << 0.5*delta_t*delta_t * IDEN3x3,
                           delta_t * IDEN3x3;
     sys_A_.block<3,3>(0, 3) = delta_t * IDEN3x3;
     sys_A_.topRightCorner<6,3>() = timing_matrix_;
     sys_B_.block<6,3>(0, 0) =  timing_matrix_;
+    */
+    sys_A_.topRightCorner<6,6>().diagonal().setConstant(delta_t);
+    sys_A_.topRightCorner<3,3>().diagonal().setConstant(0.5*delta_t*delta_t);
     
     sys_A_t_ = sys_A_.transpose();
 

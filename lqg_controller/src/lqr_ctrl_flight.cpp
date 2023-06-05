@@ -23,6 +23,7 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   declare_parameter<float>( "total_mass", mass_default );
   declare_parameter<bool>( "use_stricter_gains", false );
   declare_parameter<bool>( "enable_flatness_ff", false );
+  declare_parameter<double>( "flatness_ff_factor", 1.0 );
   declare_parameter<bool>( "mass_correction", false );
   declare_parameter<bool>( "mass_estimation", true );
   declare_parameter<std::string>( "bias_compensation", "auto" );
@@ -95,6 +96,7 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   
   /* Differential flatness feed-forward accelerations */
   get_parameter( "enable_flatness_ff", enable_flatness_ff_ );
+  get_parameter( "flatness_ff_factor", flatness_ff_factor_ );
   reference_ff_.setZero();
   
   
@@ -252,6 +254,7 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstSharedPtr m
   reference_state_mutex_.unlock();
   
   reference_ff_ << msg->an, msg->ae, msg->ad, 0.0;    // only NED accelerations
+  reference_ff_ *= flatness_ff_factor_;
   have_reference_update_ = true;
 }
 
@@ -318,6 +321,7 @@ void LQRController::computeFeedback( )
   
   /* Actual commanded input */
   RPYT_Command ctrl_cmd;
+  ctrl_cmd.header.stamp = tnow;
   ctrl_cmd.roll = roll;
   ctrl_cmd.pitch = pitch;
   ctrl_cmd.yaw = yaw;
