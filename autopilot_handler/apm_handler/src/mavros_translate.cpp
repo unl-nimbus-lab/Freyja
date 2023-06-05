@@ -71,10 +71,10 @@ class ThrustCalibration
   RowVector3d A_, B_;
   double Const_;
   std::function<RowVector3d(double)> Bprime_;
-  std::function<double(double)> volt_normed_;
-  std::function<double(double)> throttle_normed_;
-  std::function<double(double)> throttle_unnormed_;
-  std::function<double(double,double)> getExpectedThrust_;
+  std::function<double(double&)> volt_normed_;
+  std::function<double(double&)> throttle_normed_;
+  std::function<double(double&)> throttle_unnormed_;
+  std::function<double(double&,double&)> getExpectedThrust_;
 
   Eigen::PolynomialSolver<double, 3> rootSolver_;
 
@@ -109,35 +109,33 @@ class ThrustCalibration
                           };
     }
 
-    double calibThrustFromNewtons( const double &req_thrust )
+    double calibThrustFromNewtons( const double &req_collective_x4_N )
     {
       static Eigen::Matrix<double,4,1> coeffs;
+      static double req_thrust_grams = -1.0;
       
+      // convert collective Newtwons to thrust (grams) from one motor
+      req_thrust_grams = (req_collective_x4_N/4.0)/9.81 * 1000;
       const double &v = batt_volt_normed_;
-      double C = req_thrust - Const_ - A_*Eigen::Matrix<double,3,1>(v, v*v, v*v*v);
+      double C = req_thrust_grams - Const_ - A_*Eigen::Matrix<double,3,1>(v, v*v, v*v*v);
       coeffs << -C, Bprime_(v).transpose();
 
       // smallest root of this polyn is the required throttle (pre-normalised)
       bool root_found = false;
       rootSolver_.compute( coeffs );
       double thr = rootSolver_.absSmallestRealRoot(root_found, 0.1);
+      
       // do sanity check: what thrust do we expect to get from this throttle?
-      double exp_thrust = getExpectedThrust_( v, thr );
-
-      if( root_found && std::fabs( exp_thrust - req_thrust ) < THRUST_TOL )
-      {
-        // undo normalisation
-        calib_throttle_ = 4.0*throttle_unnormed_( thr );
-      }
-      else
-      {
-        // our solution is not acceptable, stick to something basic
-        calib_throttle_ = req_thrust/THRUST_SCALER;
-      }
+      double exp_collective_x4_N = getExpectedThrust_( v, thr )*4*9.81/1000.0;
+      // make sure we also are within some tolerance
+      root_found &= std::fabs( exp_collective_x4_N - req_collective_x4_N ) < THRUST_TOL;
+      calib_throttle_ = root_found ?
+                          throttle_unnormed_(thr) :
+                          req_collective_x4_N/THRUST_SCALER;
       return calib_throttle_;
     }
 
-    void setBatteryVoltage100( const double &v )
+    void setBatteryVoltage100( const double v )
     { batt_volt_normed_ = volt_normed_(v); }
 };
 
@@ -146,6 +144,7 @@ class MavrosHandler : public rclcpp::Node
 {
   bool vehicle_armed_;
   bool in_computer_mode_;
+  bool on_ground_idle_;
   std::string computer_mode_name_;
 
   FreyjaIfaceStatus fstatus_;
@@ -178,6 +177,10 @@ class MavrosHandler : public rclcpp::Node
 
     rclcpp::Subscription<Battery>::SharedPtr battery_sub_;
 
+    rclcpp::Service<BoolServ>::SharedPtr bias_enable_serv_;
+    void setOnGroundIdleServer( const BoolServ::Request::SharedPtr,
+                                const BoolServ::Response::SharedPtr );
+
     rclcpp::Client<BoolServ>::SharedPtr map_lock_;
     rclcpp::Client<BoolServ>::SharedPtr bias_comp_;
 
@@ -200,6 +203,7 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   auto qos = rclcpp::QoS( rclcpp::KeepLast(1) ).best_effort().durability_volatile();
   vehicle_armed_ = false;
   in_computer_mode_ = false;
+  on_ground_idle_ = false;
   computer_mode_name_ = "GUIDED_NOGPS";
 
   declare_parameter<double>( "thrust_scaler", 200.0 );
@@ -216,6 +220,10 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   fstatus_pub_ = create_publisher <FreyjaIfaceStatus> ( "freyja_interface_status", 1 );
   baseline_pub_ = create_publisher <GeomVec3> ( "ublox_f9p_rtkbaseline", 1 );
 
+  /* Service provider for bias compensation */
+  bias_enable_serv_ = create_service <BoolServ> ( "set_onground_idle",
+                  std::bind(&MavrosHandler::setOnGroundIdleServer, this, _1, _2 ) );
+
   // create subscribers
   ctrlCmd_sub_  = create_subscription <CtrlCommand> ( "rpyt_command", 1,
                           std::bind( &MavrosHandler::rpytCommandCallback, this, _1 ) );
@@ -225,7 +233,7 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
                           std::bind( &MavrosHandler::mavrosRCCallback, this, _1 ) );
   battery_sub_  = create_subscription <Battery> ( "mavros/battery", 1, 
                           [this](const Battery::ConstSharedPtr msg)
-                          { thrust_calib_.setBatteryVoltage100( msg->voltage ); } );
+                          { thrust_calib_.setBatteryVoltage100( int(msg->voltage*1000)/10.0 ); } );
   rtk_sub_      = create_subscription <RTKBaseline> ( "mavros/rtk_baseline", 1, 
                           [this](const RTKBaseline::ConstSharedPtr msg)
                           { 
@@ -240,6 +248,21 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   status_timer_ = rclcpp::create_timer( this, get_clock(),
                           std::chrono::duration<float>(1.0/status_pubrate),
                           std::bind(&MavrosHandler::status_publisher, this) );
+}
+
+void MavrosHandler::setOnGroundIdleServer( const BoolServ::Request::SharedPtr rq,
+                                          const BoolServ::Response::SharedPtr rp )
+{
+  if( rq->data == true && !on_ground_idle_ )
+  {
+    // newly requested ground idle
+    on_ground_idle_ = true;
+    sendToMavros( 0.0, 0.0, 0.0, 0.0 );
+  }
+  else
+    on_ground_idle_ = rq->data;
+  
+  rp->success = true;
 }
 
 void MavrosHandler::rpytCommandCallback( const CtrlCommand::ConstSharedPtr msg )
@@ -267,8 +290,10 @@ void MavrosHandler::rpytCommandCallback( const CtrlCommand::ConstSharedPtr msg )
   tgt_roll = std::max( -1.0, std::min( 1.0, tgt_roll ) );
   tgt_yawrate = std::max( -45.0, std::min( 45.0, tgt_yawrate ) );
   tgt_thrust = std::max( THRUST_MIN, std::min( THRUST_MAX, tgt_thrust ) );
+  
   /* call mavros helper function */
-  sendToMavros( tgt_pitch, tgt_roll, tgt_yawrate, tgt_thrust );
+  if( !on_ground_idle_ )
+    sendToMavros( tgt_pitch, tgt_roll, tgt_yawrate, tgt_thrust );
 }
 
 void MavrosHandler::sendToMavros( const double &p, const double &r, const double &y, const double &t )
@@ -349,7 +374,7 @@ void MavrosHandler::mavrosRCCallback( const RCInput::ConstSharedPtr msg )
   }
   
   */
-  static bool extf_state = false;
+
   if( (msg->channels).size() < 2 )
     return;
 
