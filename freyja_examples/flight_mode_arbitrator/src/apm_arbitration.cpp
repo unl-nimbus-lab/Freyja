@@ -12,6 +12,7 @@
 ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
 {
   declare_parameter<double>( "init_hover_pd", -0.75 );
+  declare_parameter<double>( "takeoff_land_spd", 0.2 );
   declare_parameter<double>( "arm_takeoff_delay", 4.0 );
   declare_parameter<double>( "mission_wdg_timeout", 1.0 );
 
@@ -29,13 +30,14 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
                             std::bind(&ApmModeArbitrator::currentStateCallback,this,_1) );
   tgtstate_sub_ = create_subscription<ReferenceState>( "target_state", 1,
                             std::bind(&ApmModeArbitrator::targetStateCallback, this,_1) );                            
-  fstatus_sub_ = create_subscription<FreyjaIfaceStatus>( "freyja_internal_status", 1,
+  fstatus_sub_ = create_subscription<FreyjaIfaceStatus>( "freyja_interface_status", 1,
                             std::bind(&ApmModeArbitrator::freyjaStatusCallback, this,_1) );
   refstate_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );                            
 
-  arming_client_ = create_client<MavrosArming> ("mavros/cmd/arming" );
-  biasreq_client_ = create_client<BoolServ> ("set_bias_compensation" );
-  extfcorr_client_ = create_client<BoolServ> ("set_extf_correction");
+  arming_client_ = create_client<MavrosArming> ( "mavros/cmd/arming" );
+  biasreq_client_ = create_client<BoolServ> ( "set_bias_compensation" );
+  extfcorr_client_ = create_client<BoolServ> ( "set_extf_correction" );
+  groundidle_client_ = create_client<BoolServ> ( "set_onground_idle" );
 
   elanding_serv_ = create_service<Trigger>( "blind_software_landing",
                             std::bind(&ApmModeArbitrator::eLandingServiceHandler, this, _1, _2) );
@@ -48,8 +50,8 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
 
 void ApmModeArbitrator::loadParameters()
 {
-  takeoff_spd_ = 0.1;                               // m/s
-  get_parameter( "init_hover_pd", init_hover_pd_ ); // hover here at first takeoff
+  get_parameter( "takeoff_land_spd", takeoff_spd_ );    // m/s
+  get_parameter( "init_hover_pd", init_hover_pd_ );     // hover here at first takeoff
   get_parameter( "arm_takeoff_delay", ARM_TAKEOFF_DELAY );
   get_parameter( "mission_wdg_timeout", MISSION_WDG_TIMEOUT );
 }
@@ -71,6 +73,7 @@ void ApmModeArbitrator::sendMavrosArmCommand( const bool req )
   auto arm_req = std::make_shared<MavrosArming::Request> ();
   arm_req->value = req;
   arming_client_->async_send_request( arm_req );
+  RCLCPP_WARN( get_logger(), "Attempting to set arming state=%d.", req );
 }
 
 void ApmModeArbitrator::eLandingServiceHandler( const Trigger::Request::SharedPtr rq,
@@ -232,13 +235,15 @@ void ApmModeArbitrator::manager()
           refstate_pub_->publish( manager_refstate_ );
           RCLCPP_WARN( get_logger(), " **** FREYJA LANDING! ****\n\tLocking current position .." );
           e_landing_ = true;
+          landingInProgress( true );
         }
         
         // push reference state down as long as above arming altitude or reference
         // @TODO: replace with an abstracted "not landingComplete()"
-        if( (pos_ned_(2) < arming_ned_(2)) || (manager_refstate_.pd - 3.0 < arming_ned_(2)) )
+        // if( (pos_ned_(2) < arming_ned_(2)) || (manager_refstate_.pd - 3.0 < arming_ned_(2)) )
+        if( landingInProgress() )
         {
-          manager_refstate_.pd += (takeoff_spd_*1.0/arbitrator_rate_);
+          manager_refstate_.pd += (takeoff_spd_*1.1/arbitrator_rate_);
           manager_refstate_.vd = takeoff_spd_;
           refstate_pub_->publish( manager_refstate_ );
         }
@@ -247,7 +252,12 @@ void ApmModeArbitrator::manager()
           // be extra sure we have pushed reference down enough
           manager_refstate_.pd = arming_ned_(2) + 5.0;
           refstate_pub_->publish( manager_refstate_ );
+          
           // send disarm command and freeze arbitration
+          auto idlereq = std::make_shared<BoolServ::Request> ();
+          idlereq -> data = true;
+          groundidle_client_ -> async_send_request( idlereq );
+          
           sendMavrosArmCommand( false );
           mission_mode_ = MissionMode::MISSION_END;
         }
@@ -273,6 +283,18 @@ void ApmModeArbitrator::manager()
         processRCEvents();
         break;
       }
+    
+    case MissionMode::MISSION_END :
+      {
+        static double t_send_disarm = t_clock_;
+        if( t_clock_ - t_send_disarm > 1.0 )
+        {
+          // keep sending disarm request, doesn't hurt
+          sendMavrosArmCommand( false );
+          t_send_disarm = t_clock_;
+        }
+        break;
+      }
   }
 
   RCLCPP_INFO_THROTTLE( get_logger(), *(get_clock()), 1000,
@@ -283,6 +305,38 @@ void ApmModeArbitrator::manager()
 void ApmModeArbitrator::processRCEvents()
 {
   
+}
+
+bool ApmModeArbitrator::landingInProgress( bool _init )
+{
+  // This function is called repeatedly when in landing mode.
+  // Returns true as long as still descending.
+
+  // fill container with default target speed
+  static int n_sec = 2;
+  static int n_hist = arbitrator_rate_*n_sec;
+  static std::vector<double> n_sec_hist(n_hist, takeoff_spd_);
+  static int coeff_idx = 0;
+  static double avg_desc_spd = 0.0;
+
+  if( _init )
+  {
+    coeff_idx = 0;
+    std::fill( n_sec_hist.begin(), n_sec_hist.end(), takeoff_spd_ );
+  }
+  else
+  {
+    // store current velocity
+    n_sec_hist[coeff_idx] = vel_d_;
+    // calculate avg
+    avg_desc_spd = std::accumulate( n_sec_hist.begin(), n_sec_hist.end(), 0.0 )/n_hist;
+    // wrap coeff accessor
+    coeff_idx = (coeff_idx == n_hist-1)? 0 : coeff_idx+1;
+    return avg_desc_spd > 0.02;
+  }
+
+  return false;
+
 }
 
 int main( int argc, char** argv )

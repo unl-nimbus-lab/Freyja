@@ -87,6 +87,7 @@ class ApmModeArbitrator : public rclcpp::Node
   Eigen::Vector4d arming_ned_;
   ReferenceState incoming_ref_;     // policy's references
   ReferenceState manager_refstate_; // manager's reference state
+  double vel_d_;
 
   float init_hover_pd_;
   float ARM_TAKEOFF_DELAY;          // wait after arming
@@ -103,7 +104,7 @@ class ApmModeArbitrator : public rclcpp::Node
   float t_tgtstate_update_;
   rclcpp::Time t_manager_init_;
 
-  bool rc_aux_switches_[4];
+  bool rc_aux_switches_[4];         // state of rc aux switches
   
   float arbitrator_rate_;
   rclcpp::TimerBase::SharedPtr manager_timer_;
@@ -121,7 +122,11 @@ class ApmModeArbitrator : public rclcpp::Node
 
     rclcpp::Subscription<CurrentState>::SharedPtr curstate_sub_;
     inline void currentStateCallback( const CurrentState::ConstSharedPtr msg )
-    { pos_ned_ << Eigen::Map<const Eigen::Vector3d>( msg->state_vector.data() ), double(msg->state_vector[8]); }
+    { 
+      pos_ned_ << Eigen::Map<const Eigen::Vector3d>( msg->state_vector.data() ),
+                  double(msg->state_vector[8]);
+      vel_d_ = msg->state_vector[5];              
+    }
 
     rclcpp::Subscription<ReferenceState>::SharedPtr tgtstate_sub_;
     void targetStateCallback( const ReferenceState::ConstSharedPtr );
@@ -129,6 +134,7 @@ class ApmModeArbitrator : public rclcpp::Node
     rclcpp::Client<MavrosArming>::SharedPtr arming_client_;
     rclcpp::Client<BoolServ>::SharedPtr biasreq_client_;
     rclcpp::Client<BoolServ>::SharedPtr extfcorr_client_;
+    rclcpp::Client<BoolServ>::SharedPtr groundidle_client_;
 
     rclcpp::Publisher<ReferenceState>::SharedPtr refstate_pub_;
 
@@ -145,4 +151,5 @@ class ApmModeArbitrator : public rclcpp::Node
     }
 
     void processRCEvents();
+    bool landingInProgress( bool _init = false );
 };
