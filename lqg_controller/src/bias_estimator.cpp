@@ -19,7 +19,8 @@ BiasEstimator::BiasEstimator() : Node( ROS_NODE_NAME )
 {
   
   declare_parameter( "estimator_rate", int(10) );
-  
+  declare_parameter( "estimator_coeffs", std::vector<double>({0.1, 0.2, 0.8, 0.2, 0.3}) );
+  declare_parameter( "estimator_use_cmdacc", false );
   
   /* Used for debug and such */
   bias_pub_ = create_publisher <EstimatedState>
@@ -58,6 +59,11 @@ BiasEstimator::~BiasEstimator()
 
 void BiasEstimator::initEstimatorSystem()
 {
+  std::vector<double> coeffs;
+  bool use_cmd_as_accel;
+  get_parameter( "estimator_coeffs", coeffs );
+  get_parameter( "estimator_usecmdacc", use_cmd_as_accel );
+
   float dt = 1.0/estimator_rate_;
   float dt2 = dt*dt/2.0;
   
@@ -68,7 +74,6 @@ void BiasEstimator::initEstimatorSystem()
             0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt, 0.0,
             0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, dt,
             Eigen::MatrixXd::Zero(3,6), Eigen::MatrixXd::Identity(3,3);
-  sys_A_t_ = sys_A_.transpose();
 
   sys_B_ << dt2, 0.0, 0.0,
             0.0, dt2, 0.0,
@@ -77,25 +82,31 @@ void BiasEstimator::initEstimatorSystem()
             0.0,  dt, 0.0,
             0.0, 0.0,  dt,
             Eigen::MatrixXd::Zero(3,3);
+  if( use_cmd_as_accel )
+  {
+    //sys_A_.bottomRightCorner<3,3>() = 0.2*Eigen::MatrixXd::Identity(3,3);
+    //sys_B_.bottomRightCorner<3,3>() = 0.8+Eigen::MatrixXd::Zero(3,3);
+  }
+  sys_A_t_ = sys_A_.transpose();
 
   /* Numbers pulled out of a magical hat only available to the deserving few */
-  proc_noise_Q_ << 0.1*IDEN3x3, ZERO3x3, ZERO3x3,
-                   ZERO3x3, 0.2*IDEN3x3, ZERO3x3,
-                   ZERO3x3, ZERO3x3, 0.8*IDEN3x3;
-  meas_noise_R_ << 0.2*IDEN3x3, ZERO3x3,
-                   ZERO3x3, 0.3*IDEN3x3;
+  proc_noise_Q_ << coeffs[0]*IDEN3x3,   ZERO3x3,            ZERO3x3,
+                   ZERO3x3,             coeffs[1]*IDEN3x3,  ZERO3x3,
+                   ZERO3x3,             ZERO3x3,            coeffs[2]*IDEN3x3;
+  meas_noise_R_ << coeffs[3]*IDEN3x3,   ZERO3x3,
+                   ZERO3x3,             coeffs[4]*IDEN3x3;
 
   meas_matrix_C_ << IDEN3x3, ZERO3x3, ZERO3x3,
                     ZERO3x3, IDEN3x3, ZERO3x3;
 
   meas_matrix_C_t = meas_matrix_C_.transpose();
-  
-  state_cov_P_ = 1*Eigen::MatrixXd::Identity(9,9);
-    
+
+  state_cov_P_ = 10.0*Eigen::MatrixXd::Identity(9,9);
+
   // guess some initial state 
-  best_estimate_ << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-  ctrl_input_u_ << 0.0, 0.0, 0.0;
-  
+  best_estimate_.setZero();
+  ctrl_input_u_.setZero();
+
   // convenience
   I9x9 = Eigen::MatrixXd::Identity(9,9); 
   I6x6 = Eigen::MatrixXd::Identity(6,6);
