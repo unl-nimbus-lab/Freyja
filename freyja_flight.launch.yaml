@@ -18,6 +18,7 @@ launch:
 - arg: { name: "use_arbitrator",    default: "false" }
   # extras
 - arg: { name: "use_waypoint_handler", default: "false" }
+- arg: { name: "initial_wpt_NEDy",     default: [0.0, 0.0, 0.0, 3.14] }
 - arg: { name: "use_examples",         default: "false" }
 
 - group:
@@ -33,38 +34,40 @@ launch:
       - { name:   "tf_myframe",         value:  "$(var tf_myframe)" }
       - { name:   "tf_baseframe",       value:  "$(var tf_baseframe)" }
       - { name:   "filter_type",        value:  "kalman" }
-      - { name:   "kf_params",          value:  [1.0, 0.05, 0.001, 100.0] }
+      - { name:   "filter_len",         value:  5 }
+      - { name:   "kf_params",          value:  [0.0594, 0.0051, 0.0147, 6.3836] }
 
   - node:
       pkg:        "lqg_control"
       exec:       "lqg_flight_node"
-      param:
-      - { name:   "total_mass",         value:  "$(var total_mass)" }   #0.85
-      - { name:   "controller_rate",    value:  50 }
-      - { name:   "estimator_rate",     value:  20 }
-      - { name:   "bias_compensation",  value:  "$(var bias_compensation)" }
-      - { name:   "apply_est_biases",   value:  true }
-      - { name:   "apply_extf_corr",    value:  false }
-      - { name:   "controller_type",    value:  "$(var controller_type)" }
-      - { name:   "enable_flatness_ff", value:  "$(var flatness_ff)" }
-      remap:
-      - { from:   "pred_ext_forces",    to:     "ext_forces_gt" }
+    param:
+    - { name:   "controller_type",    value:  "$(var controller_type)" }
+    - { name:   "total_mass",         value:  "$(var total_mass)" }   #0.85
+    - { name:   "controller_rate",    value:  50 }
+    - { name:   "estimator_rate",     value:  20 }
+    - { name:   "bias_estimator",     value:  "$(var bias_compensation)" }
+    - { name:   "apply_est_biases",   value:  true }
+    - { name:   "apply_extf_corr",    value:  false }
+    - { name:   "enable_flatness_ff", value:  "$(var flatness_ff)" }
+    - { name:   "flatness_ff_factor", value:  0.3 }
+    - { name:   "use_stricter_gains", value:  false }
 
   - node:
       if:         "$(var use_arbitrator)"
       pkg:        "flight_mode_arbitrator"
       exec:       "flight_mode_arbitrator_node"
       param:
-      - { name:   "init_hover_pd",      value:  -1.75 }
+      - { name:   "init_hover_pd",      value:  -1.75 }     # takeoff to this height
+      - { name:   "takeoff_land_spd",   value:  0.2 }       # v.speed for takeoff & landing
 
   - node:
       if:         "$(var use_waypoint_handler)"
       pkg:        "waypoint_manager"
       exec:       "waypoint_manager_node"
       param:
-      - { name:   "init_NED",           value:  [0.0, 0.0, -1.75] }
-      #remap:
-      #- { from:   "reference_state",    to:     "target_state" }
+      - { name:   "init_NEDy",          value:  "$(var initial_wpt_NEDy)" }
+      remap:
+      - { from:   "reference_state",    to:     "target_state" }
 
   - node:
       if:         "$(eval ' \"$(var autopilot)\" == \"betaflight\" ')"
@@ -79,7 +82,8 @@ launch:
         pkg:        "apm_handler"
         exec:       "apm_handler_node"
         param:
-        - { name:   "thrust_scaler",    value:  "$(var thrust_scaler)" }
+        - { name:   "thrust_scaler",      value:  "$(var thrust_scaler)" }
+        - { name:   "use_battery_calib",  value:  false }
 
     - node:
         namespace:  "mavros"                      # add another sub-namespace under the top
@@ -89,3 +93,4 @@ launch:
         param:
         - from:     "$(find-pkg-share freyja_configfiles)/launch/mavros_config_freyja.yaml"
         - { name:   "fcu_url",            value: "$(var comm_port)" }
+        - { name:   "tgt_system",         value: 1}

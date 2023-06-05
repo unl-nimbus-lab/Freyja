@@ -99,6 +99,7 @@ class StateManager: public rclcpp::Node
   double compass_yaw_;
   
   bool have_arming_origin_;
+  bool use_rtkbaseframe_;
   double map_rtk_pn_, map_rtk_pe_, map_rtk_pd_;
   double arming_gps_pn_, arming_gps_pe_, arming_gps_pd_;
   double gps_odom_pn_, gps_odom_pe_, gps_odom_pd_;
@@ -145,9 +146,9 @@ class StateManager: public rclcpp::Node
     }
     inline void lockMapRTK( bool _lock = true )
     {
-      map_rtk_pn_ = _lock? rtk_baseoffset_pn_ : 0.0;
-      map_rtk_pe_ = _lock? rtk_baseoffset_pe_ : 0.0;
-      map_rtk_pd_ = _lock? rtk_baseoffset_pd_ : 0.0;
+      map_rtk_pn_ = _lock && use_rtkbaseframe_? rtk_baseoffset_pn_ : 0.0;
+      map_rtk_pe_ = _lock && use_rtkbaseframe_? rtk_baseoffset_pe_ : 0.0;
+      map_rtk_pd_ = _lock && use_rtkbaseframe_? rtk_baseoffset_pd_ : 0.0;
     }
     
     rclcpp::Service<BoolServ>::SharedPtr maplock_srv_;
