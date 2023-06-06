@@ -129,10 +129,10 @@ void LQRController::initLqrSystem()
   get_parameter( "chassis_width", ch_w );
     
   double chassis_lw = ch_l + ch_w;  
-  wheel_geometry_matrix_ << 1.0,   1.0,  chassis_lw,
-                            1.0,  -1.0, -chassis_lw,
-                            1.0,   1.0, -chassis_lw,
-                            1.0,  -1.0,  chassis_lw;
+  wheel_geometry_matrix_ << 1.0,   1.15,  chassis_lw,
+                            1.0,  -1.15, -chassis_lw,
+                            1.0,   1.15, -chassis_lw,
+                            1.0,  -1.15,  chassis_lw;
 }
 
 void LQRController::biasEnableServer( const BoolServ::Request::SharedPtr rq,
