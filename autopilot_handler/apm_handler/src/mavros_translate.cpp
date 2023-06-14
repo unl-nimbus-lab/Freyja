@@ -71,10 +71,10 @@ class ThrustCalibration
   RowVector3d A_, B_;
   double Const_;
   std::function<RowVector3d(double)> Bprime_;
-  std::function<double(double&)> volt_normed_;
-  std::function<double(double&)> throttle_normed_;
-  std::function<double(double&)> throttle_unnormed_;
-  std::function<double(double&,double&)> getExpectedThrust_;
+  std::function<double(const double&)> volt_normed_;
+  std::function<double(const double&)> throttle_normed_;
+  std::function<double(const double&)> throttle_unnormed_;
+  std::function<double(const double&,const double&)> getExpectedThrust_;
 
   Eigen::PolynomialSolver<double, 3> rootSolver_;
 

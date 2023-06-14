@@ -40,17 +40,17 @@ launch:
   - node:
       pkg:        "lqg_control"
       exec:       "lqg_flight_node"
-    param:
-    - { name:   "controller_type",    value:  "$(var controller_type)" }
-    - { name:   "total_mass",         value:  "$(var total_mass)" }   #0.85
-    - { name:   "controller_rate",    value:  50 }
-    - { name:   "estimator_rate",     value:  20 }
-    - { name:   "bias_estimator",     value:  "$(var bias_compensation)" }
-    - { name:   "apply_est_biases",   value:  true }
-    - { name:   "apply_extf_corr",    value:  false }
-    - { name:   "enable_flatness_ff", value:  "$(var flatness_ff)" }
-    - { name:   "flatness_ff_factor", value:  0.3 }
-    - { name:   "use_stricter_gains", value:  false }
+      param:
+      - { name:   "controller_type",    value:  "$(var controller_type)" }
+      - { name:   "total_mass",         value:  "$(var total_mass)" }   #0.85
+      - { name:   "controller_rate",    value:  50 }
+      - { name:   "estimator_rate",     value:  20 }
+      - { name:   "bias_estimator",     value:  "$(var bias_compensation)" }
+      - { name:   "apply_est_biases",   value:  true }
+      - { name:   "apply_extf_corr",    value:  false }
+      - { name:   "enable_flatness_ff", value:  "$(var flatness_ff)" }
+      - { name:   "flatness_ff_factor", value:  0.3 }
+      - { name:   "use_stricter_gains", value:  false }
 
   - node:
       if:         "$(var use_arbitrator)"
