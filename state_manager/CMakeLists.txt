@@ -6,7 +6,7 @@ set( ignoreMe "${NO_PIXHAWK}${NO_ROBOMASTER}" )
 # outdated flag, has no effect. Will be removed in the future.
 set( USINGVICON 1 )
 set( LQE_ORDER 2 )
-add_compile_options( -std=c++14 -O3 -ffast-math
+add_compile_options( -std=c++17 -O3 -ffast-math
       -DUSE_VICON_=${USINGVICON}
       -DLQE_INTEGRATOR_ORDER_=${LQE_ORDER} 
    )
