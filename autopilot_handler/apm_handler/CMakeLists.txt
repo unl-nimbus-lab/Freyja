@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(apm_handler)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++14 -O3)
+add_compile_options(-O3)
+set( CMAKE_CXX_STANDARD 17 )
 
 SET(NO_PIXHAWK "false" CACHE BOOL "Building Pixhawk interface handler or not?")
 
