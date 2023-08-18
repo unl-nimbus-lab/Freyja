@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(lqg_control)
-add_compile_options( -std=c++17 -O3 -ffast-math -Wall )
+add_compile_options( -O3 -ffast-math -Wall )
+set( CMAKE_CXX_STANDARD 17 )
 
 set( ignoreMe "${NO_PIXHAWK}${NO_ROBOMASTER}" )
 

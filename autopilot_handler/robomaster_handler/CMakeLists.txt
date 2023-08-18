@@ -3,8 +3,7 @@ project(robomaster_handler)
 
 set( ignoreMe "${NO_PIXHAWK}" )
 
-## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++17)
+set( CMAKE_CXX_STANDARD 17 )
 
 SET(NO_ROBOMASTER "false" CACHE BOOL "Building robomaster interface handler or not?")
 
