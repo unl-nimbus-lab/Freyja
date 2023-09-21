@@ -15,6 +15,13 @@ float32 allocated_time
 float32 translational_speed
 
 # use allocated_time OR use translational_speed
-uint8 TIME  = 0
-uint8 SPEED = 1
+uint8 MODE_TIME  = 0
+uint8 MODE_SPEED = 1
 uint8 waypoint_mode
+
+# define manager's behaviour once the waypoint is done
+uint8 HOVER = 0
+uint8 HOLD = 1
+uint8 HOVER_STOPPUB = 2
+uint8 HOLD_STOPPUB = 3
+uint8 after_waypoint_done

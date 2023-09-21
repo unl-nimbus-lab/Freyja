@@ -26,6 +26,9 @@ Two modes are supported for waypoints: TIME (0) and SPEED (1).
 
 #include <iostream>
 #include <chrono>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
@@ -53,45 +56,256 @@ typedef freyja_msgs::msg::WaypointTarget  WaypointTarget;
 
 using std::placeholders::_1;
 
-enum modes{time_mode=0, speed_mode=1};
+namespace WaypointMode {
+  enum WaypointMode : int
+  {
+    TIME = WaypointTarget::MODE_TIME,
+    SPEED = WaypointTarget::MODE_SPEED
+  };
+}
+
+namespace TerminalBehaviour {
+  enum TerminalBehaviour : int
+  {
+    HOVER = 0,
+    HOLD = 1,
+    HOVER_STOPPUB = 2,
+    HOLD_STOPPUB = 3
+  };
+}
+
+using WaypointMode::WaypointMode;
+using TerminalBehaviour::TerminalBehaviour;
+
+
+class WaypointManager
+{
+  public:
+    // common elements for all waypoint styles
+    PosVelNED target_state_;
+    PosVelAccNED3x3 planning_cur_state_;
+    WaypointMode::WaypointMode wpt_mode_;
+    TerminalBehaviour::TerminalBehaviour term_behav_;
+    Eigen::Matrix<double, 1, 3> term_behav_vel_;
+  
+    double eta_;
+
+    bool have_waypoint_;
+    bool have_plan_;
+    bool have_forced_waypoint_;
+
+    // elements for mode TIME
+    Eigen::Matrix<double, 3, 3> tf_premult_;
+    Eigen::Matrix<double, 3, nAxes> albtgm_;
+    Eigen::Matrix<double, 3, nAxes> delta_targets_;
+    double traj_alloc_duration_;
+
+    // elements for mode SPEED
+    Eigen::Matrix<double, 1, 3> segment_gradients_;
+    Eigen::Matrix<double, 1, 3> segment_origin_;
+    Eigen::Matrix<double, 1, 3> segment_vels_;
+    double traj_alloc_speed_;
+    double segment_timeratio_;
+
+    inline void update_planning_coeffs( const double &tf )
+    {
+      tf_premult_ <<  720.0,      -360.0*tf,        60.0*tf*tf,
+                  -360.0*tf,    168.0*tf*tf,    -24.0*tf*tf*tf,
+                  60.0*tf*tf, -24.0*tf*tf*tf,   3.0*tf*tf*tf*tf;
+                  
+      /* albtgm_ is stored as three stacked cols of:
+          [alpha; beta; gamma] .. for each axis
+      */
+      albtgm_ = 1.0/std::pow(tf,5) * tf_premult_ * delta_targets_;
+    }
+
+    WaypointManager(){ have_waypoint_ = have_plan_ = have_forced_waypoint_ = false; }
+    WaypointManager( const PosVelNED _ts )
+    {
+      target_state_ = _ts;
+      have_waypoint_ = true;
+      have_plan_ = false;
+    }
+
+    inline void setTargetState( const PosVelNED _ts ) { target_state_ = std::move(_ts); }
+    inline void getTargetState( PosVelNED &ts ) { ts = target_state_; }
+    inline void setForcedTargetState( const PosVelNED _ts )
+    {
+      setTargetState( _ts );
+      have_forced_waypoint_ = true;
+    }
+    inline void setCurrentState( const PosVelAccNED &_cs )
+    { // this variable is a 3x3 matrix
+      planning_cur_state_ << _cs.head<3>(),
+                            _cs.tail<3>(),
+                            0.0, 0.0, 0.0;
+    }
+    inline void setWaypointModeAndBehav( WaypointMode::WaypointMode &m, TerminalBehaviour::TerminalBehaviour &t )
+    { // simply copy
+      wpt_mode_ = m;
+      term_behav_ = t;
+    }
+
+    // interface for the outside world
+    void setWaypointStates( const PosVelAccNED &_cs, const PosVelNED &_ts )
+    {
+      setTargetState( _ts );   // set target state as such
+      setCurrentState( _cs );  // set current state (will be reshaped a bit differently)
+      have_waypoint_ = true;
+    }
+    
+    void triggerReplanning( double param1, double param2, WaypointMode::WaypointMode& , TerminalBehaviour::TerminalBehaviour& );
+    void getCurrentReference( const double t_seg, PosVelAccNED &pva, bool &segment_done );
+};
+
+
+void WaypointManager::triggerReplanning( double p1, double p2, WaypointMode::WaypointMode &m, TerminalBehaviour::TerminalBehaviour &b )
+{
+  /* Handle a request to plan a trajectory. This function is supposed to be called
+    immediately after calling `setWaypointStates(..)`, in order to plan a trajectory
+    from the current and target states set by that function. A delayed call, or repeated
+    call to this function will result in unintended behaviour: a new plan will be created
+    from the old current-state to the old target-state, without accounting for where the
+    robot is right now.
+
+    The input argument `p1` is either allocated_time or translational_speed, based on the
+    WaypointMode argument. TerminalBehaviour defines what happens when the waypoint is
+    reached: hover, or hold last velocity.
+  */
+
+  wpt_mode_ = m;
+  term_behav_ = b;
+
+  if( wpt_mode_ == WaypointMode::TIME )
+  {
+    traj_alloc_duration_ = std::move(p1);
+    /* TWO STEPS:
+        1. Take current snapshot
+            Deltas are shaped as: [px py pz; vx vy vz].
+    */ 
+    auto targetpos = target_state_.head<3>();
+    auto targetvel = target_state_.tail<3>();
+    auto currentpos = planning_cur_state_.row(0);
+    auto currentvel = planning_cur_state_.row(1);
+
+    delta_targets_ << targetpos - currentpos - (traj_alloc_duration_*currentvel),
+                      targetvel - currentvel,
+                      0.0, 0.0, 0.0;
+
+    // 2. update timing parameters
+    update_planning_coeffs( traj_alloc_duration_ );
+
+    // also update other containers
+    eta_ = traj_alloc_duration_;
+  }
+  else if( wpt_mode_ == WaypointMode::SPEED )
+  {
+    traj_alloc_speed_ = std::move(p2);
+    // Get current and target position
+    auto targetpos = target_state_.head<3>();
+    auto currentpos = planning_cur_state_.row(0);
+
+    // x = x0 + (x1 - x0)t ; y = y0 + (y1 - y0)t ; z = z0 + (z1 - z0)t
+    segment_gradients_ = targetpos - currentpos;
+    segment_origin_ = currentpos;
+
+    // Calculate length
+    double segment_length = (targetpos - currentpos).norm();
+
+    segment_timeratio_ = traj_alloc_speed_ / segment_length;
+    segment_vels_ = segment_gradients_ * segment_timeratio_;
+
+    // update eta
+    eta_ = segment_length / traj_alloc_speed_;
+  }
+
+  have_waypoint_ = true;                // this waypoint is the current
+  have_plan_ = true;                    // we have a plan to get there
+  have_forced_waypoint_ = false;        // clear any forced initialisation waypoint
+  if( term_behav_ == TerminalBehaviour::HOVER )
+    term_behav_vel_.setZero();
+  else if( term_behav_ == TerminalBehaviour::HOLD )
+    term_behav_vel_ = target_state_.tail<3>();
+  else
+    term_behav_vel_.setZero();
+}
+
+void WaypointManager::getCurrentReference( const double t_seg, PosVelAccNED &pva, bool &segment_done )
+{
+  static PosVelAccNED3x3 tref;
+  static Eigen::Matrix<double, 3, 3> tnow_matrix;
+
+  segment_done = false;
+  if( have_forced_waypoint_ )
+  { //. have a forced waypoint target (but usually no plan), just return that waypoint.
+    // A replan event clears this behaviour.
+    pva << target_state_.head<3>(), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+    return;
+  }
+
+  // check if segment is done (note this variable is returned-by-ref)
+  if( wpt_mode_ == WaypointMode::TIME )
+    segment_done = (t_seg >= traj_alloc_duration_);
+  else if( wpt_mode_ == WaypointMode::SPEED )
+    segment_done = (t_seg*segment_timeratio_ >= 1);
+
+  if( segment_done )
+  { //. handle terminal behaviour: pos, acc are fixed, vel is dependent on param during planning
+    pva << target_state_.head<3>(),
+          term_behav_vel_,
+          0.0, 0.0, 0.0;
+    have_waypoint_ = false;
+    have_plan_ = false;
+  }
+  else
+  { //. segment is ongoing
+    if( wpt_mode_ == WaypointMode::TIME )
+    {
+      double t5 = std::pow( t_seg, 5 )/120.0;
+      double t4 = std::pow( t_seg, 4 )/24.0;
+      double t3 = std::pow( t_seg, 3 )/6.0;
+      double t2 = std::pow( t_seg, 2 )/2.0;
+  
+      tnow_matrix << t5, t4, t3,
+                      t4, t3, t2,
+                      t3, t2, t_seg;  
+      // three horz-stacked cols, each like [pos;; vel;; acc], one for each axis.
+      tref = tnow_matrix * albtgm_ +
+                (Eigen::Matrix<double, 3, 3>() <<
+                                  1, t_seg, t2,
+                                  0,  1, t_seg,
+                                  0,  0,   1).finished() * planning_cur_state_;
+      // available Eigen3.4: pva = tref.reshaped<Eigen::RowMajor>();
+      pva << tref.row(0), tref.row(1), tref.row(2);
+    }
+    else if( wpt_mode_ == WaypointMode::SPEED )
+    {
+      // Calculate new position based on line
+      auto new_pos = segment_gradients_ * (t_seg*segment_timeratio_) + 
+                      segment_origin_;
+
+      pva << new_pos, segment_vels_, 0.0, 0.0, 0.0;
+    }
+  }
+}
+
+
+
 
 class TrajectoryGenerator : public rclcpp::Node
 {
-  Eigen::Matrix<double, 3, 3> tf_premult_;
-  Eigen::Matrix<double, 3, nAxes> albtgm_;
-  Eigen::Matrix<double, 3, nAxes> delta_targets_;
+  WaypointManager WP;
+
   Eigen::Matrix<double, 1, 9> current_state_;
-  Eigen::Matrix<double, 3, 3> planning_cur_state_;
-  Eigen::Matrix<double, 1, 6> final_state_;
-
-  Eigen::Matrix<double, 1, 3> segment_gradients_;
-  Eigen::Matrix<double, 1, 3> segment_intersection_;
-  Eigen::Matrix<double, 1, 3> segment_vels_;
-
-  double yaw_target;
-  
-  /* timing related containers */
-  double traj_alloc_duration_;
-  double traj_alloc_speed_;
-  Eigen::Matrix<double, 3, 3> tnow_matrix_;
-  rclcpp::Time t_traj_init_;
+  rclcpp::Time t_last_wpt_;
   
   bool traj_init_;
-
-  modes wp_mode_;
-  double segment_percentage_;
+  bool publish_after_seg_;
   
   float k_thresh_skipreplan_;
 
-  std::vector<double> init_NED_;
-  float init_yaw_;
-  
-  int terminal_style_; // 0: posn+vel, 1: posn+vel+acc
-  
-  inline void update_albtgm( const double& );
-  inline void update_premult_matrix( const double& );
-  inline void trigger_replan_time( const double& );
-  inline void trigger_replan_speed( const double& );
+  std::vector<double> init_NEDy_;
+  double yaw_target_;
   
   public:
     TrajectoryGenerator();
@@ -104,10 +318,11 @@ class TrajectoryGenerator : public rclcpp::Node
     rclcpp::Subscription<CurrentState>::SharedPtr current_state_sub_;
     void currentStateCallback( const CurrentState::ConstSharedPtr );
     
-    rclcpp::Publisher<ReferenceState>::SharedPtr traj_ref_pub_;
-    ReferenceState traj_ref_;
+    rclcpp::Publisher<ReferenceState>::SharedPtr trajref_pub_;
+    ReferenceState trajref_;
+    
     rclcpp::TimerBase::SharedPtr traj_timer_;
-    void trajectoryReference();
+    void trajectoryReferenceManager();
     
     void publishHoverReference();
 };
@@ -118,50 +333,42 @@ TrajectoryGenerator::TrajectoryGenerator() : rclcpp::Node( rclcpp_NODE_NAME )
   k_thresh_skipreplan_ = 0.10;       // don't replan if new point within this radius
 
   /* initial location for hover */
-  declare_parameter<std::vector<double>>( "init_NED", std::vector<double>({0, 0, -0.75}) );
-  declare_parameter<float>( "init_yaw", 0.0 );
-
-  get_parameter( "init_NED", init_NED_ );
-  get_parameter( "init_yaw", init_yaw_ );
-
-  /* unused argument for trajectory shaping */
-  declare_parameter<int>( "term_style", int(1) );
-
-  /* used for speed and duration constraints*/
-  traj_alloc_duration_ = 10.0;
-  traj_alloc_speed_ = 1.0;
+  double nan_q = std::numeric_limits<double>::quiet_NaN();
+  declare_parameter<std::vector<double>>( "init_NEDy", std::vector<double>({nan_q, nan_q, nan_q, nan_q}) );
 
   traj_init_ = false;
-  t_traj_init_ = now();
-
-  // default to speed mode (as per waypoint default)
-  wp_mode_ = speed_mode;
+  publish_after_seg_ = true;
 
   // Init eigen matrices 
-  current_state_ = Eigen::Matrix<double, 1, 9>::Zero();
-  update_premult_matrix( traj_alloc_duration_ );
+  current_state_.setZero();
   
   /* Subscriptions */
   current_state_sub_ = create_subscription<CurrentState> ( "current_state", 1,
-                           std::bind(&TrajectoryGenerator::currentStateCallback, this, _1) );
+                            [this]( const CurrentState::ConstSharedPtr msg )
+                            { current_state_.head<6>() = Eigen::Map<const PosVelNED>( msg->state_vector.data() ); } );
   waypoint_sub_ = create_subscription<WaypointTarget>( "discrete_waypoint_target", 1, 
                            std::bind(&TrajectoryGenerator::waypointCallback, this, _1) );
 
   /* Publishers */
-  traj_ref_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );
+  trajref_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );
 
   /* Fixed-rate trajectory provider. Ensure ~40-50hz. */
   float traj_period = 1.0/50.0;
   traj_timer_ = rclcpp::create_timer( this, get_clock(), std::chrono::duration<float>(traj_period),
-                            std::bind(&TrajectoryGenerator::trajectoryReference, this) );
+                            std::bind(&TrajectoryGenerator::trajectoryReferenceManager, this) );
 
-  RCLCPP_WARN( get_logger(), "Initialized; waiting for waypoint .." );
-}
-
-void TrajectoryGenerator::currentStateCallback( const CurrentState::ConstSharedPtr msg )
-{
-  /* make current_state available locally */
-  current_state_.head<6>() = Eigen::Map<const PosVelNED>( msg->state_vector.data() );
+  RCLCPP_INFO( get_logger(), "Initialized; waiting for waypoint .." );
+  get_parameter( "init_NEDy", init_NEDy_ );
+  if( std::none_of( init_NEDy_.cbegin(), init_NEDy_.cend(), [](const double &d){return std::isnan(d);} ) )
+  {//. user provided a complete initial waypoint ..
+    PosVelNED initial_wpt;
+    initial_wpt << init_NEDy_[0], init_NEDy_[1], init_NEDy_[2], 0.0, 0.0, 0.0;
+    WP.setForcedTargetState( initial_wpt );
+    yaw_target_ = init_NEDy_[3];
+    traj_init_ = true;
+    t_last_wpt_ = now();
+    RCLCPP_WARN( get_logger(), "Using given initial waypoint!" );
+  }
 }
 
 void TrajectoryGenerator::waypointCallback( const WaypointTarget::ConstSharedPtr msg )
@@ -175,7 +382,7 @@ void TrajectoryGenerator::waypointCallback( const WaypointTarget::ConstSharedPtr
   */
   
   // Check if we aren't in a correct mode (time or speed mode)
-  if( msg->waypoint_mode != msg->TIME && msg->waypoint_mode != msg->SPEED )
+  if( msg->waypoint_mode != msg->MODE_TIME && msg->waypoint_mode != msg->MODE_SPEED )
   {
     // Reject waypoint
     RCLCPP_WARN( get_logger(), "Waypoint mode incorrect. Ignoring!" );
@@ -183,227 +390,90 @@ void TrajectoryGenerator::waypointCallback( const WaypointTarget::ConstSharedPtr
   }
   
   // guess if provided waypoint mode was "accidental" or maybe wrong
-  if( msg->waypoint_mode == msg->TIME && msg->allocated_time < 0.01 )
+  if( msg->waypoint_mode == msg->MODE_TIME && msg->allocated_time < 0.01 )
   {
-    RCLCPP_WARN( get_logger(), "Allocated time too small (possibly zero). Ignoring!" );
-    RCLCPP_WARN( get_logger(), "---- Did you mean to use SPEED mode?" );
+    RCLCPP_WARN( get_logger(), "Allocated time too small (possibly zero). Ignoring!\n\t--- Did you mean to use SPEED mode?" );
     return;
   }
   
-  if( msg->waypoint_mode == msg->SPEED && msg->translational_speed < 0.001 )
+  if( msg->waypoint_mode == msg->MODE_SPEED && msg->translational_speed < 0.001 )
   {
-    RCLCPP_WARN( get_logger(), "Translational speed too small (possibly zero). Ignoring!" );
-    RCLCPP_WARN( get_logger(), "---- Speed must be positive, and > 0.001 m/s." );
+    RCLCPP_WARN( get_logger(), "Translational speed too small (possibly zero). Ignoring!\n\t--- Speed must be positive, and > 0.001 m/s." );
     return;
   }
 
-  // PROCESS WAYPOINT
-  // Update yaw
-  yaw_target = msg->terminal_yaw;
 
-  // check if the change is big enough to do a replan: final_state_: [1x6]
-  Eigen::Matrix<double, 1, 6> updated_final_state;
-  updated_final_state << msg->terminal_pn, msg->terminal_pe, msg->terminal_pd,
-                         msg->terminal_vn, msg->terminal_ve, msg->terminal_vd;
+  // check if the change is big enough to do a replan: target_state_: [1x6]
+  static PosVelNED candidate_target_state, last_target_state;
+  candidate_target_state << msg->terminal_pn, msg->terminal_pe, msg->terminal_pd,
+                            msg->terminal_vn, msg->terminal_ve, msg->terminal_vd;
 
-  if( ( updated_final_state - final_state_ ).norm() > k_thresh_skipreplan_ || !traj_init_ )
+  bool accept_wpt = !traj_init_ ||
+                    (candidate_target_state.head<3>() - last_target_state.head<3>()).norm() > k_thresh_skipreplan_;
+  if( accept_wpt )
   {
     /* accept new waypoint */
-    final_state_ = updated_final_state;
-
-    if (msg->waypoint_mode == msg->TIME) // Time mode
-    {
-      traj_alloc_duration_ = msg->allocated_time;
-      trigger_replan_time( traj_alloc_duration_ );
-      wp_mode_ = time_mode;
-    }
-    else                                // Speed mode 
-    {
-      traj_alloc_speed_ = msg->translational_speed;
-      trigger_replan_speed( traj_alloc_speed_ );
-      wp_mode_ = speed_mode;
-    }
+    auto m = static_cast<WaypointMode::WaypointMode>(msg->waypoint_mode);
+    auto b = static_cast<TerminalBehaviour::TerminalBehaviour>(msg->after_waypoint_done);
+    WP.setWaypointStates(current_state_, candidate_target_state);
+    WP.triggerReplanning(msg->allocated_time, msg->translational_speed, m, b);
+    yaw_target_ = msg->terminal_yaw;
+    if(msg->after_waypoint_done == TerminalBehaviour::HOLD_STOPPUB || msg->after_waypoint_done == TerminalBehaviour::HOVER_STOPPUB)
+      publish_after_seg_ = false;
+    else
+      publish_after_seg_ = true;
     
     RCLCPP_INFO( get_logger(), "Plan generated!" );
-    t_traj_init_ = now();
+    t_last_wpt_ = now();
+    last_target_state = candidate_target_state;
+    traj_init_ = true;
   }
   else
   {
     // Reject waypoint because it is not distinct enough
     RCLCPP_WARN( get_logger(), "New WP too close to old WP. Ignoring!" );
   }
-
-  // this is only handled once - trajectory is never reinit, only updated.
-  if( traj_init_ == false )
-  {
-    traj_init_ = true;
-  }
 }
 
-void TrajectoryGenerator::trigger_replan_speed( const double &speed )
-{
-  // Get current and target position
-  auto targetpos = final_state_.head<3>();
-  auto currentpos = current_state_.head<3>();
-
-  // x = x0 + (x1 - x0)t ; y = y0 + (y1 - y0)t ; z = z0 + (z1 - z0)t
-  segment_gradients_ = targetpos - currentpos;
-  segment_intersection_ = currentpos;
-
-  // Calculate length
-  double segment_length = (targetpos - currentpos).norm();
-
-  segment_percentage_ = speed / segment_length;
-  segment_vels_ = segment_gradients_ * segment_percentage_;
-}
-
-void TrajectoryGenerator::trigger_replan_time( const double &dt )
-{
-  /* TWO STEPS:
-     1. Take current snapshot
-        Deltas are shaped as: [px py pz; vx vy vz].
-  */ 
-  auto targetpos = final_state_.head<3>();
-  auto targetvel = final_state_.tail<3>();
-  auto currentpos = current_state_.head<3>();
-  auto currentvel = current_state_.block<1,3>(0,3);
-  
-  delta_targets_ << targetpos - currentpos - dt*currentvel,
-                    targetvel - currentvel,
-                    0.0, 0.0, 0.0;
-  /* save snapshot of current_state */
-  planning_cur_state_ << currentpos,
-                         currentvel,
-                         0.0, 0.0, 0.0;
-  
-  
-  // 2. update timing parameters
-  update_premult_matrix( dt );
-}
-
-
-
-inline void TrajectoryGenerator::update_premult_matrix( const double &tf )
-{
-  tf_premult_ <<  720.0,      -360.0*tf,        60.0*tf*tf,
-                 -360.0*tf,    168.0*tf*tf,    -24.0*tf*tf*tf,
-                  60.0*tf*tf, -24.0*tf*tf*tf,   3.0*tf*tf*tf*tf;
-                 
-  // necessarily update alpha, beta and gamma as well
-  update_albtgm( tf );
-}
-
-inline void TrajectoryGenerator::update_albtgm( const double &dt )
-{
-  /* albtgm_ is stored as three stacked cols of:
-          [alpha; beta; gamma] .. for each axis
-  */
-  albtgm_ = 1.0/std::pow(dt,5) * tf_premult_ * delta_targets_;
-}
-
-void TrajectoryGenerator::trajectoryReference( )
+void TrajectoryGenerator::trajectoryReferenceManager( )
 {
   /* This is the trajectory generator - gets called at a fixed rate.
   This must keep track of current time since "go". If go-signal has
   not been recorded yet, we must stay at initial position.
   */
-    
-  float tnow = traj_init_ ? (now() - t_traj_init_).seconds() : -1.0;
+  static PosVelAccNED tref; // 1x9: [pn, pe, pd, vn, ve, vd, an, ae, ad]
+  static bool segment_done = false;
+
+  if( !traj_init_ )
+    return;
+
   
-  static PosVelAccNED3x3 tref; // [pn, pe, pd;; vn, ve, vd;; an, ae, ad]
+  float t_seg = (now() - t_last_wpt_).seconds();
 
-  if ( wp_mode_ == time_mode ) // Time mode
-  {
-    /* check if we are past the final time */
-    if( tnow > traj_alloc_duration_ || !traj_init_ )
-    {
-      publishHoverReference();
-      return;
-    }
-      
-    double t5 = std::pow( tnow, 5 )/120.0;
-    double t4 = std::pow( tnow, 4 )/24.0;
-    double t3 = std::pow( tnow, 3 )/6.0;
-    double t2 = std::pow( tnow, 2 )/2.0;
-    
-    tnow_matrix_ << t5, t4, t3,
-                    t4, t3, t2,
-                    t3, t2, tnow;  
-    // three stacked cols of [pos, vel, acc]^T for each axis.
-    tref = tnow_matrix_ * albtgm_ +
-              (Eigen::Matrix<double, 3, 3>() <<
-                                1, tnow, t2,
-                                0,  1, tnow,
-                                0,  0,   1).finished() * planning_cur_state_;
-  }
-  else // Speed mode
-  {
-    /* check if we have arrived at the waypoint */
-    if( ( tnow * segment_percentage_ ) >= 1  || !traj_init_ )
-    {
-      publishHoverReference();
-      return;
-    }
-
-    // Calculate new position based on line
-    auto new_pos = segment_gradients_ * (tnow * segment_percentage_) + 
-                   segment_intersection_;
-
-    tref << new_pos,
-            segment_vels_,
-            0.0, 0.0, 0.0;
-
-  }
+  WP.getCurrentReference( t_seg, tref, segment_done );
   
   /* fill in and publish */
-  traj_ref_.pn = tref(0,0);
-  traj_ref_.pe = tref(0,1);
-  traj_ref_.pd = tref(0,2);
+  trajref_.pn = tref.coeff(0);
+  trajref_.pe = tref.coeff(1);
+  trajref_.pd = tref.coeff(2);
 
-  traj_ref_.vn = tref(1,0);
-  traj_ref_.ve = tref(1,1);
-  traj_ref_.vd = tref(1,2);
+  trajref_.vn = tref.coeff(3);
+  trajref_.ve = tref.coeff(4);
+  trajref_.vd = tref.coeff(5);
 
-  traj_ref_.an = tref(2,0);
-  traj_ref_.ae = tref(2,1);
-  traj_ref_.ad = tref(2,2);
+  trajref_.an = tref.coeff(6);
+  trajref_.ae = tref.coeff(7);
+  trajref_.ad = tref.coeff(8);
 
-  traj_ref_.yaw = yaw_target;     // nothing special for yaw
-  traj_ref_.header.stamp = now();
+  trajref_.yaw = yaw_target_;     // nothing special for yaw
+  trajref_.header.stamp = now();
 
-  traj_ref_pub_ -> publish( traj_ref_ );
+  // Publish only if segment is not done, or if the publisher
+  // is requested to stay active after a segment
+  if( !segment_done || publish_after_seg_ )
+    trajref_pub_ -> publish( trajref_ );
 }
 
-void TrajectoryGenerator::publishHoverReference()
-{
-  if( !traj_init_ )
-  {
-    // trajectory hasn't been initialsed
-    traj_ref_.pn = init_NED_[0];
-    traj_ref_.pe = init_NED_[1];
-    traj_ref_.pd = init_NED_[2];
-    traj_ref_.yaw = init_yaw_;
-  }
-  else
-  {
-    // trajectory segment completed
-    traj_ref_.pn = final_state_[0];
-    traj_ref_.pe = final_state_[1];
-    traj_ref_.pd = final_state_[2];
-    traj_ref_.yaw = yaw_target;
-  }
-  
-  traj_ref_.vn = 0.0;
-  traj_ref_.ve = 0.0;
-  traj_ref_.vd = 0.0;
-
-  traj_ref_.an = 0.0;
-  traj_ref_.ae = 0.0;
-  traj_ref_.ad = 0.0;
-
-  traj_ref_.header.stamp = now();
-  traj_ref_pub_ -> publish( traj_ref_ );
-}
 
 int main( int argc, char** argv )
 {
@@ -412,7 +482,3 @@ int main( int argc, char** argv )
   rclcpp::shutdown();
   return 0;
 }
-
-
-//TODO: Add status waypoint_done, protect trajectory-gen with mutex
-//TODO: change to enum class, and start enumerating at 1
