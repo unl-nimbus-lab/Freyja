@@ -15,24 +15,36 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
   declare_parameter<double>( "takeoff_land_spd", 0.2 );
   declare_parameter<double>( "arm_takeoff_delay", 4.0 );
   declare_parameter<double>( "mission_wdg_timeout", 1.0 );
+  declare_parameter<bool>( "await_cmd_after_rc", false );
 
   loadParameters();
   
   e_landing_ = false;
   arm_req_sent_ = false;
   target_state_avail_ = false;
+  software_trigger_recv = false;
   t_clock_ = 0.0;
 
   vehicle_mode_ = VehicleMode::NO_CONNECT;
-  mission_mode_ = MissionMode::PENDING_PILOT;
+  mission_mode_ = MissionMode::NOT_INIT;
+
+  /* create at least two groups -- and put the timer in a separate group.
+    The clients will default to a separate 'node default' group (MutExcl).
+     !! NOTE: The current_state and target_state callbacks are in a reentrant group. !!
+  */
+  timer_cb_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  csrs_cb_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  rclcpp::SubscriptionOptions options;
+  options.callback_group = csrs_cb_group_;
 
   curstate_sub_ = create_subscription<CurrentState>( "current_state", 1, 
-                            std::bind(&ApmModeArbitrator::currentStateCallback,this,_1) );
+                            std::bind(&ApmModeArbitrator::currentStateCallback,this,_1), options );
   tgtstate_sub_ = create_subscription<ReferenceState>( "target_state", 1,
-                            std::bind(&ApmModeArbitrator::targetStateCallback, this,_1) );                            
+                            std::bind(&ApmModeArbitrator::targetStateCallback, this,_1), options );                            
   fstatus_sub_ = create_subscription<FreyjaIfaceStatus>( "freyja_interface_status", 1,
                             std::bind(&ApmModeArbitrator::freyjaStatusCallback, this,_1) );
-  refstate_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );                            
+  refstate_pub_ = create_publisher<ReferenceState>( "reference_state", 1 );    
+  manager_mode_pub_ = create_publisher<std_msgs::msg::UInt8> ( "flight_arbitration_mode", 1);                      
 
   arming_client_ = create_client<MavrosArming> ( "mavros/cmd/arming" );
   biasreq_client_ = create_client<BoolServ> ( "set_bias_compensation" );
@@ -41,10 +53,17 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
 
   elanding_serv_ = create_service<Trigger>( "blind_software_landing",
                             std::bind(&ApmModeArbitrator::eLandingServiceHandler, this, _1, _2) );
+  start_manager_serv_ = create_service<Trigger>( "start_arm_takeoff",
+                            [this](const Trigger::Request::SharedPtr rq, const Trigger::Response::SharedPtr rp)
+                            {
+                              software_trigger_recv = true;
+                              rp->success = true;
+                            } );
   arbitrator_rate_ = 10.0;   // mode arbitrator runs at this rate, hz
   manager_timer_ = create_timer( this, get_clock(),
                             std::chrono::duration<float>(1.0/arbitrator_rate_),
-                            std::bind(&ApmModeArbitrator::manager, this) );
+                            std::bind(&ApmModeArbitrator::manager, this),
+                            timer_cb_group_ );
   t_manager_init_ = now();
 }
 
@@ -54,16 +73,18 @@ void ApmModeArbitrator::loadParameters()
   get_parameter( "init_hover_pd", init_hover_pd_ );     // hover here at first takeoff
   get_parameter( "arm_takeoff_delay", ARM_TAKEOFF_DELAY );
   get_parameter( "mission_wdg_timeout", MISSION_WDG_TIMEOUT );
+  get_parameter( "await_cmd_after_rc", await_cmd_after_switch_ );
 }
 
 /*
-    "target_state" : Callback for external policy controllers.
+    "target_state" : Callback for external reference generators.
+    This reference is forwarded to the controller only when in MISSION_EXEC mode.
 */
 void ApmModeArbitrator::targetStateCallback( const ReferenceState::ConstSharedPtr msg )
 {
   target_state_avail_ = true;
-  t_tgtstate_update_ = t_clock_;
-  //incoming_ref_ = *msg;
+  t_tgtstate_update_ = t_clock_;            // for watchdog
+  // publish only if we are in MISSION_EXEC mode
   if( forward_ref_state_ )
     refstate_pub_->publish( *msg );
 }
@@ -73,7 +94,7 @@ void ApmModeArbitrator::sendMavrosArmCommand( const bool req )
   auto arm_req = std::make_shared<MavrosArming::Request> ();
   arm_req->value = req;
   arming_client_->async_send_request( arm_req );
-  RCLCPP_WARN( get_logger(), "Attempting to set arming state=%d.", req );
+  RCLCPP_WARN( get_logger(), "Requesting arming state = %d.", req );
 }
 
 void ApmModeArbitrator::eLandingServiceHandler( const Trigger::Request::SharedPtr rq,
@@ -87,6 +108,11 @@ void ApmModeArbitrator::eLandingServiceHandler( const Trigger::Request::SharedPt
 void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIfaceStatus::ConstSharedPtr msg )
 {
   /* msg contains vehicle mode, armed?, and rcdata */
+  /*
+    This function handles vehicle state as reported by the vehicle (not our guesses),
+    and thus should modify only the vehicle_mode_ enum. The mission_mode_ variable is
+    generally not modified here, unless for special cases.
+  */
   static int skip_initial_msgs = 0;
   if( skip_initial_msgs < 20 )
   {
@@ -94,34 +120,31 @@ void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIfaceStatus::ConstShar
     RCLCPP_WARN( get_logger(), "Intentionally waiting .." );
     return;
   }
-  // in comp ctrl but not armed
-  if( msg->armed == false && msg->computer_ctrl )
+
+  bool sys_healthy = msg->connected && (t_clock_ - t_curstate_update_) < 0.5;
+  if( sys_healthy )
   {
-    // we are here in the beginning or in the end
-    if( mission_mode_ == MissionMode::MISSION_END )
-    {
-      // DO NOTHING: keep mission mode the same
-      mission_mode_ = MissionMode::MISSION_END;
-      vehicle_mode_ = VehicleMode::DISARMED_COMP;
-    }
-    else
-    {
-      // change to mission arm mode
+    if( mission_mode_ == MissionMode::NOT_INIT )
+    { //. this begins the state machine arbitration
       mission_mode_ = MissionMode::PENDING_PILOT;
-      vehicle_mode_ = VehicleMode::DISARMED_COMP;
-      RCLCPP_INFO( get_logger(), "Changing mission-mode to: ARM_NOW." );
+      vehicle_mode_ = VehicleMode::DISARMED_NOCOMP;
     }
   }
-
-  if( msg->armed && msg->computer_ctrl )
-  {
-    vehicle_mode_ = VehicleMode::ARMED_COMP;
+  else
+  { //. we are not connected yet, or have lost connection, or have no state data
+    mission_mode_ = MissionMode::NOT_INIT;
+    vehicle_mode_ = VehicleMode::NO_CONNECT;
+    // we could exit the callback here, but there may be additional work that we
+    // could be doing regardless of these conditions, so let's continue.
   }
 
-  if( msg->armed && msg->computer_ctrl == false )
-  {
-    vehicle_mode_ = VehicleMode::ARMED_NOCOMP;
-    mission_mode_ = MissionMode::PENDING_PILOT;
+  if( msg->computer_ctrl == true )
+  { //. pilot has given us control authority
+    vehicle_mode_ = (msg->armed)? VehicleMode::ARMED_COMP : VehicleMode::DISARMED_COMP;
+  }
+  else
+  { //. pilot has not given us authority
+    vehicle_mode_ = (msg->armed)? VehicleMode::ARMED_NOCOMP : VehicleMode::DISARMED_NOCOMP;
   }
 
   // handle aux data
@@ -139,40 +162,61 @@ void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIfaceStatus::ConstShar
 void ApmModeArbitrator::manager()
 {
   /* Main mode manager function, called at a fixed rate */
-
+  static std_msgs::msg::UInt8 manager_mode_msg;
   t_clock_ = (now() - t_manager_init_).seconds();
 
   switch( mission_mode_ )
   {
     case MissionMode::PENDING_PILOT :
-      {
+      { //. we are not in control at the moment, so keep checking if we are
         RCLCPP_INFO_THROTTLE( get_logger(), *(get_clock()), 2000, "Awaiting Pilot Switch .." );
-        // send arming command and don't send again
+        
+        // there are 4 vehicle modes we can generally be in during this mode; 2 interesting
         if( vehicle_mode_ == VehicleMode::DISARMED_COMP )
-        {
-          if( !arm_req_sent_ )
-          {
-            sendMavrosArmCommand( true );
-            t_comp_armed_ = t_clock_;
-            arm_req_sent_ = true;
-          }
+        { //. pilot has given control (RC), but arming has not happened.
+          mission_mode_ = MissionMode::PENDING_CMD;
         }
         else if( vehicle_mode_ == VehicleMode::ARMED_COMP )
-        {
-          if( arm_req_sent_ )
+        { //. we went from PENDING_PILOT to being in the air with computer control
+          t_comp_armed_ = -100.0;                       // don't know when this arming happened
+          mission_mode_ = MissionMode::MISSION_EXEC;    // no other states in between
+        }
+        forward_ref_state_ = false;
+        break;
+      }
+
+    case MissionMode::PENDING_CMD :
+      { //. pilot has given us authority, but we should probably wait for a software trigger
+        if( await_cmd_after_switch_ && !software_trigger_recv )
+        { //. can't do anything until a software command is received
+          RCLCPP_INFO_THROTTLE( get_logger(), *(get_clock()), 2000, "Pilot ready -- awaiting GO command." );
+          keepDisarmedAndHappy();
+        }
+        else
+          software_trigger_recv = true;   // automatically transition to next mode
+
+        if( software_trigger_recv )
+        { //. we are clear to go!
+          if( vehicle_mode_==VehicleMode::DISARMED_COMP )
           {
-            arming_ned_ = pos_ned_;
-            updateManagerRefNED( arming_ned_ );
-            arm_req_sent_ = false;
-            mission_mode_ = MissionMode::TAKING_OFF;
-            RCLCPP_WARN( get_logger(), "-- ARMED BY COMPUTER -- TAKING OFF --" );
+            if ( !arm_req_sent_ )
+            { //. send the very first arm command
+              RCLCPP_WARN( get_logger(), "Sending ARM command!!" );
+              auto idlereq = std::make_shared<BoolServ::Request> ();
+              idlereq -> data = false;                // unlock ground lock
+              groundidle_client_ -> async_send_request( idlereq );
+              sendMavrosArmCommand( true );           // send command
+              arm_req_sent_ = true;                   // prevent returning here
+            }
           }
-          else
+          else if( vehicle_mode_ == VehicleMode::ARMED_COMP )
           {
-            // we didn't send arming, but we find ourselves already armed
-            t_comp_armed_ = -100.0;             // we don't know when armed            
-            updateManagerRefNED( pos_ned_ );
-            mission_mode_ = MissionMode::TAKING_OFF;
+            arm_req_sent_ = false;                    // clear this for future
+            t_comp_armed_ = t_clock_;                 // note when arming happened
+            arming_ned_ = pos_ned_;                   // update where arming happened
+            updateManagerRefNED(arming_ned_);         // update our reference state
+            mission_mode_ = MissionMode::TAKING_OFF;  // change to takeoff
+            RCLCPP_WARN( get_logger(), "-- ARMED BY COMPUTER -- TAKING OFF --" );
           }
         }
         forward_ref_state_ = false;
@@ -192,7 +236,7 @@ void ApmModeArbitrator::manager()
         {
           manager_refstate_.pd -= (takeoff_spd_*1.0/arbitrator_rate_);
           manager_refstate_.vd = -takeoff_spd_;
-          RCLCPP_WARN_THROTTLE( get_logger(), *(get_clock()), 500, "TAKEOFF ALT: %0.1f/%0.1f", pos_ned_(2), init_hover_pd_ );
+          RCLCPP_WARN_THROTTLE( get_logger(), *(get_clock()), 500, "TAKEOFF in-prog: %0.1f/%0.1f", pos_ned_(2), init_hover_pd_ );
         }
         else
         {
@@ -201,7 +245,7 @@ void ApmModeArbitrator::manager()
           updateManagerRefNED( pos_ned_ );
           RCLCPP_INFO( get_logger(), "Done takeoff." );
           mission_mode_ = MissionMode::HOVERING;
-
+          // turn on bias compensation
           auto biasreq = std::make_shared<BoolServ::Request> ();
           biasreq -> data = true;
           biasreq_client_ -> async_send_request( biasreq );
@@ -212,7 +256,7 @@ void ApmModeArbitrator::manager()
       }
     case MissionMode::HOVERING :
       {
-        // wait here until a target_state is available (from policy/rvo3 etc)
+        // wait here until a target_state is available (from an external source)
         if( target_state_avail_ )
           mission_mode_ = MissionMode::MISSION_EXEC;
 
@@ -239,8 +283,6 @@ void ApmModeArbitrator::manager()
         }
         
         // push reference state down as long as above arming altitude or reference
-        // @TODO: replace with an abstracted "not landingComplete()"
-        // if( (pos_ned_(2) < arming_ned_(2)) || (manager_refstate_.pd - 3.0 < arming_ned_(2)) )
         if( landingInProgress() )
         {
           manager_refstate_.pd += (takeoff_spd_*1.1/arbitrator_rate_);
@@ -286,20 +328,14 @@ void ApmModeArbitrator::manager()
     
     case MissionMode::MISSION_END :
       {
-        static double t_send_disarm = t_clock_;
-        if( t_clock_ - t_send_disarm > 1.0 )
-        {
-          // keep sending disarm request, doesn't hurt
-          sendMavrosArmCommand( false );
-          t_send_disarm = t_clock_;
-        }
+        keepDisarmedAndHappy();
         break;
       }
   }
-
+  manager_mode_msg.data = static_cast<unsigned int>(mission_mode_);
+  manager_mode_pub_ -> publish(manager_mode_msg);
   RCLCPP_INFO_THROTTLE( get_logger(), *(get_clock()), 1000,
                         "Mission Mode: %s", MissionModeName[(int)mission_mode_] );
-
 }
 
 void ApmModeArbitrator::processRCEvents()
@@ -339,10 +375,29 @@ bool ApmModeArbitrator::landingInProgress( bool _init )
 
 }
 
+void ApmModeArbitrator::keepDisarmedAndHappy()
+{
+  // This function may be called quite frequently when the vehicle is
+  // set in computer mode but we aren't ready to fly yet. In this state,
+  // we send disarm commands and zero thrust periodically.
+  static float t_last_disarm = t_clock_;
+  if( t_clock_ - t_last_disarm > 2.0 )
+  { //. keep sending zero thrust packets and disarm requests
+    auto idlereq = std::make_shared<BoolServ::Request> ();
+    idlereq -> data = true;
+    groundidle_client_ -> async_send_request( idlereq );
+    sendMavrosArmCommand( false );
+    t_last_disarm = t_clock_;
+  }
+}
+
 int main( int argc, char** argv )
 {
   rclcpp::init( argc, argv );
-  rclcpp::spin( std::make_shared<ApmModeArbitrator>() );
+  auto n = std::make_shared<ApmModeArbitrator>();
+  rclcpp::executors::MultiThreadedExecutor exec;
+  exec.add_node(n);
+  exec.spin();
 
   rclcpp::shutdown();
   return 0;

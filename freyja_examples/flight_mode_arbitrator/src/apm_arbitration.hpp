@@ -13,6 +13,7 @@
 
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "std_msgs/msg/u_int8.hpp"
 
 #include "freyja_msgs/msg/ctrl_command.hpp"
 #include "freyja_msgs/msg/freyja_interface_status.hpp"
@@ -44,21 +45,21 @@ using std::placeholders::_2;
 
 #define vModes(OP) \
   OP(NO_CONNECT) \
+  OP(ARMED_COMP) \
   OP(ARMED_NOCOMP) \
   OP(DISARMED_COMP) \
-  OP(ARMED_COMP) \
-  OP(PILOT_CTRL) \
+  OP(DISARMED_NOCOMP) \
   OP(COMPUTER_CTRL) \
   OP(ARMED) \
-  OP(ARMED_BY_PILOT) \
   OP(TAKEOFF) \
-  OP(TAKEOFF_BY_PILOT) \
   OP(HOVER_READY) \
   OP(LANDING) \
   OP(DISARMED)
 
 #define mModes(OP) \
+  OP(NOT_INIT) \
   OP(PENDING_PILOT) \
+  OP(PENDING_CMD) \
   OP(TAKING_OFF) \
   OP(HOVERING) \
   OP(E_LANDING) \
@@ -68,11 +69,13 @@ using std::placeholders::_2;
 #define MAKE_ENUM(OP) OP,
 #define MAKE_ENUM_STRS(OP) #OP,
 
-enum class VehicleMode: int
-{ vModes(MAKE_ENUM) };
+namespace VehicleMode {
+  enum VehicleMode { vModes(MAKE_ENUM) };
+}
 
-enum class MissionMode: int
-{ mModes(MAKE_ENUM) };
+namespace MissionMode {
+  enum MissionMode { mModes(MAKE_ENUM) };
+}
 
 const char* const VehicleModeName[] = { vModes(MAKE_ENUM_STRS) };
 const char* const MissionModeName[] = { mModes(MAKE_ENUM_STRS) };
@@ -80,8 +83,8 @@ const char* const MissionModeName[] = { mModes(MAKE_ENUM_STRS) };
 
 class ApmModeArbitrator : public rclcpp::Node
 {
-  VehicleMode vehicle_mode_;
-  MissionMode mission_mode_;
+  VehicleMode::VehicleMode vehicle_mode_;
+  MissionMode::MissionMode mission_mode_;
 
   Eigen::Vector4d pos_ned_;         // current state 
   Eigen::Vector4d arming_ned_;
@@ -98,10 +101,13 @@ class ApmModeArbitrator : public rclcpp::Node
   bool arm_req_sent_;               // arming sent
   bool forward_ref_state_;          // should we simply fwd incoming reference (policy mode)
   bool target_state_avail_;         // has ext. policy/mission provided a reference yet
+  bool software_trigger_recv;       // has user code triggered arm+takeoff request
+  bool await_cmd_after_switch_;     // should we wait for user even after an RC switch?
 
   float t_clock_;                   // Node time-keeping (zero at constructor)
   float t_comp_armed_;
   float t_tgtstate_update_;
+  float t_curstate_update_;
   rclcpp::Time t_manager_init_;
 
   bool rc_aux_switches_[4];         // state of rc aux switches
@@ -125,7 +131,8 @@ class ApmModeArbitrator : public rclcpp::Node
     { 
       pos_ned_ << Eigen::Map<const Eigen::Vector3d>( msg->state_vector.data() ),
                   double(msg->state_vector[8]);
-      vel_d_ = msg->state_vector[5];              
+      vel_d_ = msg->state_vector[5];   
+      t_curstate_update_ = t_clock_;           
     }
 
     rclcpp::Subscription<ReferenceState>::SharedPtr tgtstate_sub_;
@@ -137,10 +144,12 @@ class ApmModeArbitrator : public rclcpp::Node
     rclcpp::Client<BoolServ>::SharedPtr groundidle_client_;
 
     rclcpp::Publisher<ReferenceState>::SharedPtr refstate_pub_;
+    rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr manager_mode_pub_;
 
     rclcpp::Service<Trigger>::SharedPtr elanding_serv_;
     void eLandingServiceHandler( const Trigger::Request::SharedPtr,
                                  const Trigger::Response::SharedPtr );
+    rclcpp::Service<Trigger>::SharedPtr start_manager_serv_;
 
     inline void updateManagerRefNED( const Eigen::Vector4d &ned )
     {
@@ -152,4 +161,8 @@ class ApmModeArbitrator : public rclcpp::Node
 
     void processRCEvents();
     bool landingInProgress( bool _init = false );
+    void keepDisarmedAndHappy();
+
+    rclcpp::CallbackGroup::SharedPtr timer_cb_group_;
+    rclcpp::CallbackGroup::SharedPtr csrs_cb_group_;
 };
