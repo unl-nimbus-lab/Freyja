@@ -315,7 +315,7 @@ void MavrosHandler::sendToMavros( const double &p, const double &r, const double
 void MavrosHandler::mavrosStateCallback( const MavState::ConstSharedPtr msg )
 {
   /* call map lock/unlock service when arming/disarming */
-  RCLCPP_INFO( get_logger(), "state cb" );
+  // RCLCPP_INFO( get_logger(), "state cb" );
 
   auto lockreq = std::make_shared<BoolServ::Request> ();
   if( msg->armed == true && !vehicle_armed_ )
@@ -346,9 +346,10 @@ void MavrosHandler::mavrosStateCallback( const MavState::ConstSharedPtr msg )
     biasreq -> data = false;
     bias_comp_ -> async_send_request( biasreq );
   }
-    
+  
   fstatus_.armed = vehicle_armed_;
   fstatus_.computer_ctrl = in_computer_mode_;
+  fstatus_.header.stamp = now();
 }
 
 
@@ -389,6 +390,8 @@ void MavrosHandler::mavrosRCCallback( const RCInput::ConstSharedPtr msg )
 // This function is on a timer, called at fixed (pretty low) rate
 void MavrosHandler::status_publisher()
 {
+  // say we're connected if vehicle state is recent enough
+  fstatus_.connected = (now() - fstatus_.header.stamp).seconds() < 2.0;
   fstatus_pub_ -> publish( fstatus_ );
 }
 

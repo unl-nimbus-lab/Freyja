@@ -109,12 +109,15 @@ void StateManager::timerTfCallback()
 {
   /* This is a timer callback */
   static TFStamped tform;
+  static std::string err_msg;
   
-  if( tf_buffer_ -> canTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero, tf2::Duration(0) ) )
+  if( tf_buffer_ -> canTransform( tf_my_frame_, tf_base_frame_, tf2::TimePointZero, tf2::Duration(0), &err_msg ) )
   {
     tform = tf_buffer_ -> lookupTransform( tf_base_frame_, tf_my_frame_, tf2::TimePointZero );
     mocapCallback( std::make_shared<const TFStamped>( tform ) );
   }
+  else
+    RCLCPP_WARN_THROTTLE( get_logger(), *(get_clock()), 500, "Freyja: TF warn: %s", err_msg.c_str() );
 
 }
 
