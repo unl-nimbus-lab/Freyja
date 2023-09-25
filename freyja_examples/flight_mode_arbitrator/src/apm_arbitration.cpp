@@ -15,6 +15,7 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
   declare_parameter<double>( "takeoff_land_spd", 0.2 );
   declare_parameter<double>( "arm_takeoff_delay", 4.0 );
   declare_parameter<double>( "mission_wdg_timeout", 1.0 );
+  declare_parameter<double>( "hover_wdg_timeout", -1.0 );
   declare_parameter<bool>( "await_cmd_after_rc", false );
 
   loadParameters();
@@ -23,6 +24,7 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
   arm_req_sent_ = false;
   target_state_avail_ = false;
   software_trigger_recv = false;
+  land_from_hovertimeout_ = HOVER_WDG_TIMEOUT > 0.0;
   t_clock_ = 0.0;
 
   vehicle_mode_ = VehicleMode::NO_CONNECT;
@@ -73,6 +75,7 @@ void ApmModeArbitrator::loadParameters()
   get_parameter( "init_hover_pd", init_hover_pd_ );     // hover here at first takeoff
   get_parameter( "arm_takeoff_delay", ARM_TAKEOFF_DELAY );
   get_parameter( "mission_wdg_timeout", MISSION_WDG_TIMEOUT );
+  get_parameter( "hover_wdg_timeout", HOVER_WDG_TIMEOUT );
   get_parameter( "await_cmd_after_rc", await_cmd_after_switch_ );
 }
 
@@ -245,6 +248,7 @@ void ApmModeArbitrator::manager()
           updateManagerRefNED( pos_ned_ );
           RCLCPP_INFO( get_logger(), "Done takeoff." );
           mission_mode_ = MissionMode::HOVERING;
+          t_enter_auto_hover_ = t_clock_;
           // turn on bias compensation
           auto biasreq = std::make_shared<BoolServ::Request> ();
           biasreq -> data = true;
@@ -254,11 +258,20 @@ void ApmModeArbitrator::manager()
         forward_ref_state_ = false;
         break;
       }
+      
     case MissionMode::HOVERING :
       {
         // wait here until a target_state is available (from an external source)
         if( target_state_avail_ )
           mission_mode_ = MissionMode::MISSION_EXEC;
+        else if( land_from_hovertimeout_ )
+        { //. if landing from hover-timeout is enabled
+          if( (t_clock_ - t_enter_auto_hover_) > HOVER_WDG_TIMEOUT )
+          { //. switch to landing mode
+            RCLCPP_WARN( get_logger(), "Hover timeout. Switching to auto landing!" );
+            mission_mode_ = MissionMode::E_LANDING;
+          }
+        }
 
         // publish zero velocities; positions are captured at other places
         manager_refstate_.vn = manager_refstate_.ve = manager_refstate_.vd = 0.0;
@@ -279,7 +292,7 @@ void ApmModeArbitrator::manager()
           refstate_pub_->publish( manager_refstate_ );
           RCLCPP_WARN( get_logger(), " **** FREYJA LANDING! ****\n\tLocking current position .." );
           e_landing_ = true;
-          landingInProgress( true );
+          landingInProgress( /*_initialise=*/true );
         }
         
         // push reference state down as long as above arming altitude or reference
@@ -318,6 +331,7 @@ void ApmModeArbitrator::manager()
           // capture current state, and switch to HOVER
           updateManagerRefNED( pos_ned_ );
           mission_mode_ = MissionMode::HOVERING;
+          t_enter_auto_hover_ = t_clock_;
           target_state_avail_ = false;
         }
         

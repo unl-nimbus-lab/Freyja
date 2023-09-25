@@ -95,6 +95,7 @@ class ApmModeArbitrator : public rclcpp::Node
   float init_hover_pd_;
   float ARM_TAKEOFF_DELAY;          // wait after arming
   float MISSION_WDG_TIMEOUT;        // wdog timeout to switch back to hover
+  float HOVER_WDG_TIMEOUT;          // wdog timeout to switch to landing
   float takeoff_spd_;               // rate of ascent (scalar)
 
   bool e_landing_;                  // in emergency landing [Freyja-controlled]
@@ -103,11 +104,13 @@ class ApmModeArbitrator : public rclcpp::Node
   bool target_state_avail_;         // has ext. policy/mission provided a reference yet
   bool software_trigger_recv;       // has user code triggered arm+takeoff request
   bool await_cmd_after_switch_;     // should we wait for user even after an RC switch?
+  bool land_from_hovertimeout_;     // should we land if auto-hovering for some duration?
 
   float t_clock_;                   // Node time-keeping (zero at constructor)
   float t_comp_armed_;
   float t_tgtstate_update_;
   float t_curstate_update_;
+  float t_enter_auto_hover_;
   rclcpp::Time t_manager_init_;
 
   bool rc_aux_switches_[4];         // state of rc aux switches
