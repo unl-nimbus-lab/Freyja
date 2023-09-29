@@ -20,9 +20,13 @@
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/impl/utils.h>
-//#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#ifdef ROSVER_FOXY_OR_GALAC
+  #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#else
+  #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#endif
 
 #include "freyja_msgs/msg/current_state.hpp"
 #include "freyja_msgs/msg/asctec_data.hpp"

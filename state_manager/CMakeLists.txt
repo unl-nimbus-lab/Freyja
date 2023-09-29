@@ -33,6 +33,13 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
 )
 
+# we need some means to support older ROS2 distros for a while
+if(DEFINED ENV{ROS_DISTRO})
+    if("$ENV{ROS_DISTRO}" MATCHES "foxy" OR "$ENV{ROS_DISTRO}" MATCHES "galactic")
+        add_compile_options( -DROSVER_FOXY_OR_GALAC )
+    endif()
+endif()
+
 add_executable(state_manager_node src/state_manager.cpp src/state_estimator.cpp)
 target_include_directories( state_manager_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
