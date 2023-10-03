@@ -49,8 +49,9 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
                     ( "wheel_command", 1 );
   controller_debug_pub_ = create_publisher <CTRL_Debug>
                     ( "controller_debug", 1 );
-  est_mass_pub_ = create_publisher <std_msgs::msg::Float32>
-                    ( "freyja_estimated_mass", 1 );
+  // @TODO: replace this with a slip-estimation module
+  // est_mass_pub_ = create_publisher <std_msgs::msg::Float32>
+  //                   ( "freyja_estimated_mass", 1 );
 
   
   /* Checks for correctness */
@@ -61,12 +62,12 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   /* Bias compensation parameters */
   std::string _bcomp = "auto";
   get_parameter( "bias_compensation", _bcomp );
-  if( _bcomp == "on" )
+  if( _bcomp == "always-on" )
     bias_compensation_req_ = true;                // always on (be careful!!)
-  else if( _bcomp == "auto" || _bcomp == "off" )
+  else if( _bcomp == "auto" || _bcomp == "always-off" )
     bias_compensation_req_ = false;               // off, or on by service call
   
-  bias_compensation_off_ = (_bcomp == "off")? true : false;   // always off
+  bias_compensation_off_ = (_bcomp == "always-off")? true : false;   // always off
   
   f_biases_ << 0.0, 0.0, 0.0;
 
@@ -293,15 +294,10 @@ void LQRController::computeFeedback( )
     debug_msg.errv[idx] = static_cast<float>(state_err(idx));
 
   debug_msg.flags = (debug_msg.BIAS_EN * bias_compensation_req_) |
-                    (debug_msg.MASS_CR * enable_dyn_mass_correction_ ) |
+                    (debug_msg.MASS_CR * false ) |                  // not applicable here
                     (debug_msg.FLAT_FF * enable_flatness_ff_ ) |
                     (debug_msg.CTRL_OK * state_valid );
   controller_debug_pub_ -> publish( debug_msg ); 
-}
-
-void LQRController::estimateMass( const double &c, rclcpp::Time &t )
-{
-  
 }
 
 void LQRController::constrainAccel( const Eigen::Matrix<double,3,1> &prev, 

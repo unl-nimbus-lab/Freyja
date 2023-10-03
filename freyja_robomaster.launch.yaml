@@ -4,7 +4,7 @@ launch:
 - arg: { name: "tf_baseframe",      default: "map"  }         # assumed ENU
   # controller customisations
 - arg: { name: "controller_type",   default: "pos-vel"  }     # pos-vel, vel-only, open-loop
-- arg: { name: "flatness_ff",       default: "false" }        # use velocity as feed-fwd
+- arg: { name: "flatness_ff",       default: "true" }         # use velocity as feed-fwd
 - arg: { name: "accels_as_limits",  default: "false" }        # interpret accles as limits
   # extras
 - arg: { name: "use_waypoint_handler", default: "false" }
@@ -17,10 +17,11 @@ launch:
       output:     "screen"
       param:
       - { name:   "state_source",       value:  "tf-mocap" }
-      - { name:   "tf_rate",            value:  190 }
+      - { name:   "tf_rate",            value:  100 }
       - { name:   "tf_myframe",         value:  "$(var tf_myframe)" }
       - { name:   "tf_baseframe",       value:  "$(var tf_baseframe)" }
-      - { name:   "filter_type",        value:  "median" }
+      - { name:   "filter_type",        value:  "gauss" }
+      - { name:   "filter_length",      value:  5 }
 
   - node:
       pkg:        "lqg_control"

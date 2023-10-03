@@ -87,9 +87,6 @@ class LQRController : public rclcpp::Node
   Eigen::Matrix<double, 3, 1> f_biases_;
   std::thread bias_handler_thread_;
   
-  /*Dynamic mass estimation and compensation */
-  bool enable_dyn_mass_correction_;
-  bool enable_dyn_mass_estimation_;
   
   public:
     LQRController( BiasEstimator & );
@@ -113,10 +110,6 @@ class LQRController : public rclcpp::Node
 
     /* helper function to calculate yaw error */
     static constexpr inline double calcYawError( const double&, const double& ) __attribute__((always_inline));
-    
-    /* estimate actual mass in flight */
-    void estimateMass( const double &, rclcpp::Time & );
-    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr est_mass_pub_;
 
     void constrainAccel( const Eigen::Matrix<double,3,1> &prev, Eigen::Matrix<double,3,1> &cur );
 };
