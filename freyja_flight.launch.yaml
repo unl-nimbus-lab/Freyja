@@ -16,9 +16,10 @@ launch:
 - arg: { name: "use_mavros",        default: "false"  }
 - arg: { name: "comm_port",         default: "/dev/ttyUSB0:921600"  }
 - arg: { name: "use_arbitrator",    default: "false" }
+- arg: { name: "numeric_id",        default: "1" }
   # extras
 - arg: { name: "use_waypoint_handler", default: "false" }
-- arg: { name: "initial_wpt_NEDy",     default: [0.0, 0.0, 0.0, 3.14] }
+- arg: { name: "initial_wpt_NEDy",     default: "[0.0, 0.0, 0.0, 3.14]" }
 - arg: { name: "use_examples",         default: "false" }
 
 - group:
@@ -93,4 +94,4 @@ launch:
         param:
         - from:     "$(find-pkg-share freyja_configfiles)/launch/mavros_config_freyja.yaml"
         - { name:   "fcu_url",            value: "$(var comm_port)" }
-        - { name:   "tgt_system",         value: 1}
+        - { name:   "tgt_system",         value: "$(var numeric_id)" }

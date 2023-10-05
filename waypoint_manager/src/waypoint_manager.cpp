@@ -359,7 +359,7 @@ TrajectoryGenerator::TrajectoryGenerator() : rclcpp::Node( rclcpp_NODE_NAME )
 
   RCLCPP_INFO( get_logger(), "Initialized; waiting for waypoint .." );
   get_parameter( "init_NEDy", init_NEDy_ );
-  if( std::none_of( init_NEDy_.cbegin(), init_NEDy_.cend(), [](const double &d){return std::isnan(d);} ) )
+  if( init_NEDy_.size() > 3 && std::none_of( init_NEDy_.cbegin(), init_NEDy_.cend(), [](const double &d){return std::isnan(d);} ) )
   {//. user provided a complete initial waypoint ..
     PosVelNED initial_wpt;
     initial_wpt << init_NEDy_[0], init_NEDy_[1], init_NEDy_[2], 0.0, 0.0, 0.0;
