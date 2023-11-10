@@ -49,6 +49,7 @@ ament_target_dependencies( state_manager_node
   rclcpp
   std_msgs
   freyja_msgs
+  sensor_msgs
   geometry_msgs
   std_srvs
   nav_msgs
