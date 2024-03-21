@@ -50,12 +50,16 @@ class LQRController : public rclcpp::Node
   /* Reference state vector */
   Eigen::Matrix<double, 6, 1> reference_state_;
   Eigen::Matrix<double, 3, 1> reference_ff_;
-  Eigen::Matrix<double, 3, 1> accel_limits_;
+  Eigen::Matrix<double, 3, 1> accel_refs_;
+  
+  /* Controller properties */
+  int controller_rate_;
+  bool use_stricter_gains_;
+  std::string controller_type_;
   bool enable_flatness_ff_;
   bool enable_accel_limiting_;
-  
-  /* Rate of execution for LQR's feedback */
-  int controller_rate_;
+  bool enable_accel_feedfwd_;
+  double accel_ff_factor_;
   
   /* System matrices */
   Eigen::MatrixXf sys_A_, sys_B_;
@@ -63,12 +67,6 @@ class LQRController : public rclcpp::Node
   Eigen::Matrix<double, 3, 6> lqr_K_;
   Eigen::Matrix<double, 4, 3> wheel_geometry_matrix_;
   double wheel_rad_;
-  bool use_stricter_gains_;
-  std::string controller_type_;
-  
-  /* Vehicle properties */
-  float total_mass_;
-
   
   /* Rotation matrices */
   Eigen::Matrix<double, 3, 3> rot_yaw_;

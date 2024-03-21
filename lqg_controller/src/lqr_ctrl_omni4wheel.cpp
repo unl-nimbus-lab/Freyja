@@ -19,18 +19,20 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   int controller_rate_default = 30;
   
   declare_parameter<int>( "controller_rate", controller_rate_default );
-  declare_parameter<bool>( "enable_flatness_ff", false );
-  declare_parameter<bool>( "use_accels_as_limits", false );
+  declare_parameter<bool>( "enable_flatness_ff", true );
   declare_parameter<std::string>( "bias_compensation", "auto" );
   declare_parameter<std::string>( "controller_type", "pos-vel" );
+  declare_parameter<std::string>( "refstate_accels_mode", "ignore" );
+  declare_parameter<double>( "accel_ff_factor", 0.25 );
 
   declare_parameter<double>( "chassis_length", 0.4 );
   declare_parameter<double>( "chassis_width", 0.3 );
   declare_parameter<double>( "wheel_radius", 0.10 );
-  
-  get_parameter( "controller_rate", controller_rate_ );
-  get_parameter( "use_accels_as_limits", enable_accel_limiting_ );
 
+  /* Checks for correctness */
+  STATEFB_MISSING_INTRV_ = 0.5;
+  have_state_update_ = false;
+  have_reference_update_ = false;  
   
   /* Associate a subscriber for the current vehicle state */
   state_sub_ = create_subscription<CurrentState>( "current_state", 1,
@@ -54,10 +56,9 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
   //                   ( "freyja_estimated_mass", 1 );
 
   
-  /* Checks for correctness */
-  STATEFB_MISSING_INTRV_ = 0.5;
-  have_state_update_ = false;
-  have_reference_update_ = false;  
+
+  get_parameter( "controller_rate", controller_rate_ );
+  get_parameter( "accel_ff_factor", accel_ff_factor_ );
   
   /* Bias compensation parameters */
   std::string _bcomp = "auto";
@@ -68,8 +69,19 @@ LQRController::LQRController(BiasEstimator &b) : Node( ROS_NODE_NAME ),
     bias_compensation_req_ = false;               // off, or on by service call
   
   bias_compensation_off_ = (_bcomp == "always-off")? true : false;   // always off
-  
   f_biases_ << 0.0, 0.0, 0.0;
+
+  /* handle accel data in reference state */
+  enable_accel_limiting_ = false;
+  enable_accel_feedfwd_ = false;
+  std::string _accel_mode;
+  get_parameter("refstate_accels_mode", _accel_mode);
+  if( _accel_mode == "limits" )             // treat values as scalar limits
+    enable_accel_limiting_ = true;
+  else if ( _accel_mode == "feedforward" )  // treat values as vector feedfwd elements
+    enable_accel_feedfwd_ = true;
+  else                                      // default: ignore accels
+    RCLCPP_INFO( get_logger(), "LQG: ignoring accels in reference state." );
 
 
   /* initialise system, matrices and controller configuration */
@@ -217,7 +229,7 @@ void LQRController::trajectoryReferenceCallback( const TrajRef::ConstSharedPtr m
   reference_ff_ << msg->vn, msg->ve, 0.0;    // feed-forward
   have_reference_update_ = true;
 
-  accel_limits_ << msg->an, msg->ae, 0.0;    // clip vel-out by these 
+  accel_refs_ << msg->an, msg->ae, 0.0;    // clip vel-out by these 
 }
 
 
@@ -250,10 +262,12 @@ void LQRController::computeFeedback( )
     /* Compute control inputs (accelerations, in this case) */
     state_err = std::move( reduced_state_ );
     control_input = -1 * lqr_K_ * state_err 
-                    + static_cast<double>(enable_flatness_ff_) * reference_ff_;
+                    + static_cast<double>(enable_flatness_ff_) * reference_ff_
+                    + static_cast<double>(enable_accel_feedfwd_) * (accel_refs_ * accel_ff_factor_);
   
     /* Force saturation on acceleration */
-    constrainAccel( prev_control_input, control_input );
+    if( enable_accel_limiting_ )
+      constrainAccel( prev_control_input, control_input );
     prev_control_input = control_input;
     
     /* See if bias compensation was requested .. */
@@ -303,10 +317,10 @@ void LQRController::computeFeedback( )
 void LQRController::constrainAccel( const Eigen::Matrix<double,3,1> &prev, 
                                     Eigen::Matrix<double,3,1> &cur )
 {
-  Eigen::Vector3d req_accel = (cur-prev)*controller_rate_;                              // requested
-  accel_limits_ = (accel_limits_.array().abs() < 1e-2).select(1000.0, accel_limits_);   // if near-zero, set to "inf"
-  req_accel = req_accel.cwiseMin( accel_limits_ ).cwiseMax( -accel_limits_ );           // limit to range
-  cur = prev + req_accel*(1.0/controller_rate_);                                        // shaped
+  Eigen::Vector3d req_accel = (cur-prev)*controller_rate_;                        // from controller
+  accel_refs_ = (accel_refs_.array().abs() < 1e-2).select(1000.0, accel_refs_);   // if near-zero, set to "inf"
+  req_accel = req_accel.cwiseMin( accel_refs_ ).cwiseMax( -accel_refs_ );         // limit to range
+  cur = prev + req_accel*(1.0/controller_rate_);                                  // shaped
 }
 
 int main( int argc, char** argv )
