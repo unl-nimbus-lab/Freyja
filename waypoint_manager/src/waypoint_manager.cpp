@@ -367,7 +367,7 @@ TrajectoryGenerator::TrajectoryGenerator() : rclcpp::Node( rclcpp_NODE_NAME )
     yaw_target_ = init_NEDy_[3];
     traj_init_ = true;
     t_last_wpt_ = now();
-    RCLCPP_WARN( get_logger(), "Using given initial waypoint!" );
+    RCLCPP_WARN( get_logger(), "Using given initial waypoint! %0.2f, %0.2f, %0.2f", init_NEDy_[0], init_NEDy_[1], init_NEDy_[3] );
   }
 }
 

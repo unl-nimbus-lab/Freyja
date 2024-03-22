@@ -234,7 +234,7 @@ MavrosHandler::MavrosHandler() :  Node( ROS_NODE_NAME )
   battery_sub_  = create_subscription <Battery> ( "mavros/battery", 1, 
                           [this](const Battery::ConstSharedPtr msg)
                           { thrust_calib_.setBatteryVoltage100( int(msg->voltage*1000)/10.0 ); } );
-  rtk_sub_      = create_subscription <RTKBaseline> ( "mavros/rtk_baseline", 1, 
+  rtk_sub_      = create_subscription <RTKBaseline> ( "mavros/gps_rtk/rtk_baseline", 1, 
                           [this](const RTKBaseline::ConstSharedPtr msg)
                           { 
                             baseline_msg_.x = msg->baseline_a_mm/1000.0;

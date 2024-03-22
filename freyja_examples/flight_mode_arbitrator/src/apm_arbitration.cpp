@@ -17,6 +17,7 @@ ApmModeArbitrator::ApmModeArbitrator() : Node( ROS_NODE_NAME )
   declare_parameter<double>( "mission_wdg_timeout", 1.0 );
   declare_parameter<double>( "hover_wdg_timeout", -1.0 );
   declare_parameter<bool>( "await_cmd_after_rc", false );
+  declare_parameter<int>( "sys_ready_checks", 3 );
 
   loadParameters();
   
@@ -77,6 +78,9 @@ void ApmModeArbitrator::loadParameters()
   get_parameter( "mission_wdg_timeout", MISSION_WDG_TIMEOUT );
   get_parameter( "hover_wdg_timeout", HOVER_WDG_TIMEOUT );
   get_parameter( "await_cmd_after_rc", await_cmd_after_switch_ );
+  int sys_ready_checks;
+  get_parameter( "sys_ready_checks", sys_ready_checks );
+  sysready_chk_flags_ = 0b11111111 & sys_ready_checks;
 }
 
 /*
@@ -124,7 +128,11 @@ void ApmModeArbitrator::freyjaStatusCallback( const FreyjaIfaceStatus::ConstShar
     return;
   }
 
-  bool sys_healthy = msg->connected && (t_clock_ - t_curstate_update_) < 0.5;
+  uint8_t sys_readiness = (SysReadyChecks::Connected * msg->connected)  |
+                          (SysReadyChecks::CurState * ((t_clock_ - t_curstate_update_) < 0.5)) |
+                          (SysReadyChecks::GpsRtk * true);
+  bool sys_healthy = sysready_chk_flags_ == (sysready_chk_flags_ & sys_readiness);
+                                                 
   if( sys_healthy )
   {
     if( mission_mode_ == MissionMode::NOT_INIT )
@@ -258,7 +266,7 @@ void ApmModeArbitrator::manager()
         forward_ref_state_ = false;
         break;
       }
-      
+
     case MissionMode::HOVERING :
       {
         // wait here until a target_state is available (from an external source)

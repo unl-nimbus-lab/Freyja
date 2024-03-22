@@ -77,6 +77,12 @@ namespace MissionMode {
   enum MissionMode { mModes(MAKE_ENUM) };
 }
 
+enum SysReadyChecks : uint8_t {
+  Connected = 0x01 << 0,
+  CurState = 0x01 << 1,
+  GpsRtk = 0x01 << 2
+};
+
 const char* const VehicleModeName[] = { vModes(MAKE_ENUM_STRS) };
 const char* const MissionModeName[] = { mModes(MAKE_ENUM_STRS) };
 
@@ -105,6 +111,9 @@ class ApmModeArbitrator : public rclcpp::Node
   bool software_trigger_recv;       // has user code triggered arm+takeoff request
   bool await_cmd_after_switch_;     // should we wait for user even after an RC switch?
   bool land_from_hovertimeout_;     // should we land if auto-hovering for some duration?
+
+  uint8_t sysready_chk_flags_;      // bitmask for checks to perform
+                                    // cast as uint8_t, [x x x x x gps_rtk, cur_state, conn]
 
   float t_clock_;                   // Node time-keeping (zero at constructor)
   float t_comp_armed_;
