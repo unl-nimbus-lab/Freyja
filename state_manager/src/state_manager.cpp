@@ -4,7 +4,7 @@
 
 #define rclcpp_NODE_NAME "state_manager"
 
-StateManager::StateManager() : Node( rclcpp_NODE_NAME )
+StateManager::StateManager() : Node( rclcpp_NODE_NAME ), manager_ready_(false)
 {
   state_vector_.resize( STATE_VECTOR_LEN );
   pose_filter_ = nullptr;
@@ -33,6 +33,12 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
     initTfManager();
   else if (state_source_ == "apm" )
      initPixhawkManager();
+  else if(state_source_ == "none")
+    {
+      RCLCPP_WARN(get_logger(), "Freyja: disabling state-manager due to no state source.");
+      rclcpp::shutdown(nullptr, "Freyja: state-manager user intended shutdown." );
+      return;
+    }
 
   use_kf_ = false;
 
@@ -93,6 +99,7 @@ StateManager::StateManager() : Node( rclcpp_NODE_NAME )
   }
   lastUpdateTime_ = now();
   have_location_fix_ = false;
+  manager_ready_ = true;
 }
 
 void StateManager::initMocapManager()
@@ -206,7 +213,9 @@ void StateManager::initPixhawkManager()
 int main( int argc, char **argv )
 {
   rclcpp::init( argc, argv );
-  rclcpp::spin( std::make_shared<StateManager>() );
+  auto mgr_node = std::make_shared<StateManager>();
+  if( mgr_node->manager_ready_ )
+    rclcpp::spin( mgr_node );
   rclcpp::shutdown();
   return 0;
 }

@@ -119,7 +119,7 @@ void NStateManager::initTfManager()
 
   std::ostringstream s;
   s << "Tracking following " << n_objects_ << " objects in TF tree:\n";
-  s << "\t\t\";
+  s << "\t\t";
   for(const auto &o : tf_objects_)
     s << o << " ";
   s << std::endl;

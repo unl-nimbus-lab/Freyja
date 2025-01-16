@@ -111,7 +111,9 @@ class StateManager: public rclcpp::Node
   Eigen::Vector3d rtkbase_offsets_;
   
   public:
+    bool manager_ready_;
     StateManager();
+
     /* launch-time parameter specifies which one to pick */
     void initPixhawkManager();
     void initTfManager();
