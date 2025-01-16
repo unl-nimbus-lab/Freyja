@@ -65,6 +65,30 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# add_executable(state_manager_node src/state_manager.cpp src/state_estimator.cpp)
+add_executable(nstate_manager_node src/n_state_manager.cpp)
+target_include_directories( nstate_manager_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies( nstate_manager_node 
+  rclcpp
+  std_msgs
+  freyja_msgs
+  geometry_msgs
+  std_srvs
+  nav_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  freyja_utils
+)
+
+install(TARGETS
+  nstate_manager_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ### Can use state estimator INSTEAD of manager with the right modifications
 ### This contains an LQE (Kalman) for full state.
 
