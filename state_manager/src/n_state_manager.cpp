@@ -85,17 +85,13 @@ NStateManager::NStateManager() : Node("NStateManagerNode")
   get_parameter( "tf_rate", tf_lookup_rate );
   // create fixed-rate timer
   tf_listen_timer_  = rclcpp::create_timer(
-                                            #ifdef ROSVER_FOXY_OR_GALAC
-                                              this, get_clock(),
-                                            #endif
+                                            this, get_clock(),
                                             std::chrono::duration<float>(1.0/tf_lookup_rate),
                                             std::bind(&NStateManager::timerTfCallback, this),
                                             cb_grp1_ );
   // create fixed-rate timer
-  tf_pubs_timer_    = rclcpp::create_timer( 
-                                            #ifdef ROSVER_FOXY_OR_GALAC
-                                              this, get_clock(),
-                                            #endif
+  tf_pubs_timer_    = rclcpp::create_timer(
+                                            this, get_clock(),
                                             std::chrono::duration<float>(1.0/100.0),
                                             std::bind(&NStateManager::timerTFPublishers, this),
                                             cb_grp2_ );
