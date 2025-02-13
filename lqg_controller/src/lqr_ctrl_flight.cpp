@@ -277,6 +277,8 @@ void LQRController::computeFeedback( )
   
   bool state_valid = true;
   auto tnow = now();
+
+  Eigen::Matrix<double, 3, 1> f_external = f_ext_;
   
   /* Check the difference from last state update time */
   float state_age = (tnow - last_state_update_t_).seconds();
@@ -307,7 +309,7 @@ void LQRController::computeFeedback( )
     }
 
     /* Correct for external forces */
-    control_input.head<3>() -= (apply_extf_corr_ * f_ext_.head<3>() );
+    control_input.head<3>() -= (apply_extf_corr_ * f_external.head<3>() );
   
     /* Thrust */
     T = total_mass_ * control_input.head<3>().norm();
@@ -332,7 +334,7 @@ void LQRController::computeFeedback( )
 
   /* Tell bias estimator about new control input */
   if( bias_compensation_req_ )
-    bias_est_.setControlInput( control_input );
+    bias_est_.setControlInput( control_input, f_external );
     
   /* Update the total flying mass if requested */
   if( enable_dyn_mass_estimation_ )

@@ -96,7 +96,7 @@ class BiasEstimator : public rclcpp::Node
     void initEstimatorSystem();
     
     void setMeasurement( const Eigen::Matrix<double, 6, 1> & );
-    void setControlInput( const Eigen::Matrix<double, 4, 1> & );
+    void setControlInput( const Eigen::Matrix<double, 4, 1> &, const Eigen::Matrix<double, 3, 1> );
     void getEstimatedBiases( Eigen::Matrix<double, 3, 1> & );
     
     /* set and reset accessors */

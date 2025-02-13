@@ -209,12 +209,12 @@ void BiasEstimator::setMeasurement( const Eigen::Matrix<double, 6, 1> &m )
   state_updation();
 }
 
-void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c )
+void BiasEstimator::setControlInput( const Eigen::Matrix<double, 4, 1> &c, const Eigen::Matrix<double, 3, 1> f_known )
 {
   state_prop_mutex_.lock();
-    ctrl_input_u_[0] = c[0];
-    ctrl_input_u_[1] = c[1];
-    ctrl_input_u_[2] = c[2] + 9.81;
+    ctrl_input_u_[0] = c[0] + f_known[0];
+    ctrl_input_u_[1] = c[1] + f_known[1];
+    ctrl_input_u_[2] = c[2] + 9.81 + f_known[2];
   state_prop_mutex_.unlock();
 }
 void BiasEstimator::getEstimatedBiases( Eigen::Matrix<double, 3, 1> &eb )

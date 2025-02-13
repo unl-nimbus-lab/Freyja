@@ -295,7 +295,7 @@ void LQRController::computeFeedback( )
   static Eigen::Matrix<double,4,1> bias_ctrl_input;
   bias_ctrl_input << control_input, 0.0;
   if( bias_compensation_req_ )
-    bias_est_.setControlInput( bias_ctrl_input );
+    bias_est_.setControlInput( bias_ctrl_input, Eigen::MatrixXd::Zero(3,1) );
     
   /* Debug information */
   static CTRL_Debug debug_msg;
