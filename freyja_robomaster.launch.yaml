@@ -1,5 +1,6 @@
 launch:
   # state customisations
+- arg: { name: "state_source",        default: "tf-mocap"  }
 - arg: { name: "tf_myframe",          default: "robomaster_-1"  }
 - arg: { name: "tf_baseframe",        default: "map"  }         # assumed ENU
   # controller customisations
@@ -19,8 +20,9 @@ launch:
       pkg:        "state_manager"
       exec:       "state_manager_node"
       output:     "screen"
+      if:         "$(eval '\"$(var state_source)\"!=\"none\"')"
       param:
-      - { name:   "state_source",       value:  "tf-mocap" }
+      - { name:   "state_source",       value:  "$(var state_source)" }
       - { name:   "tf_rate",            value:  100 }
       - { name:   "tf_myframe",         value:  "$(var tf_myframe)" }
       - { name:   "tf_baseframe",       value:  "$(var tf_baseframe)" }
