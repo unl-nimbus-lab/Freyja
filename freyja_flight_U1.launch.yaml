@@ -1,0 +1,91 @@
+launch:
+
+  # state customisations
+- arg: { name: "state_source",      default: "tf-mocap" }          # apm, tf-mocap, mocap
+- arg: { name: "autopilot",         default: "arducopter" }   # arducopter, betaflight 
+- arg: { name: "tf_myframe",        default: "U1"  }
+- arg: { name: "tf_baseframe",      default: "map"  }         # assumed ENU
+  # controller customisations
+- arg: { name: "total_mass",        default: "1.00" }         # kg, total mass flying
+- arg: { name: "thrust_scaler",     default: "50.0" }         # scales from Newtons to [0..1]
+- arg: { name: "bias_compensation", default: "always-off" }   # auto, always-{on, off}
+- arg: { name: "flatness_ff",       default: "false" }        # use accel feed-fwd
+- arg: { name: "controller_type",   default: "pos-vel"  }     # pos-vel, vel-only, NEvel-Dpos
+  # operational customisations
+- arg: { name: "use_namespace",     default: "U1" }
+- arg: { name: "use_mavros",        default: "false"  }
+- arg: { name: "comm_port",         default: "/dev/ttyUSB0:921600"  }
+- arg: { name: "use_arbitrator",    default: "false" }
+  # extras
+- arg: { name: "use_waypoint_handler", default: "false" }
+- arg: { name: "use_examples",         default: "false" }
+
+- group:
+  - push-ros-namespace:
+      namespace:  "$(var use_namespace)"
+  - node:
+      pkg:        "state_manager"
+      exec:       "state_manager_node"
+      output:     "screen"
+      param:
+      - { name:   "state_source",       value:  "$(var state_source)" }
+      - { name:   "tf_rate",            value:  100 }
+      - { name:   "tf_myframe",         value:  "$(var tf_myframe)" }
+      - { name:   "tf_baseframe",       value:  "$(var tf_baseframe)" }
+      - { name:   "filter_type",        value:  "kalman" }
+      - { name:   "kf_params",          value:  [1.0, 0.05, 0.001, 100.0] }
+
+  - node:
+      pkg:        "lqg_control"
+      exec:       "lqg_flight_node"
+      param:
+      - { name:   "total_mass",         value:  "$(var total_mass)" }   #0.85
+      - { name:   "controller_rate",    value:  50 }
+      - { name:   "estimator_rate",     value:  20 }
+      - { name:   "bias_compensation",  value:  "$(var bias_compensation)" }
+      - { name:   "apply_est_biases",   value:  true }
+      - { name:   "apply_extf_corr",    value:  false }
+      - { name:   "controller_type",    value:  "$(var controller_type)" }
+      - { name:   "enable_flatness_ff", value:  "$(var flatness_ff)" }
+      remap:
+      - { from:   "pred_ext_forces",    to:     "ext_forces_gt" }
+
+  - node:
+      if:         "$(var use_arbitrator)"
+      pkg:        "flight_mode_arbitrator"
+      exec:       "flight_mode_arbitrator_node"
+      param:
+      - { name:   "init_hover_pd",      value:  -1.75 }
+
+  - node:
+      if:         "$(var use_waypoint_handler)"
+      pkg:        "waypoint_manager"
+      exec:       "waypoint_manager_node"
+      param:
+      - { name:   "init_NED",           value:  [0.0, 1.5, -1.75] }
+      #remap:
+      #- { from:   "reference_state",    to:     "target_state" }
+
+  - node:
+      if:         "$(eval ' \"$(var autopilot)\" == \"betaflight\" ')"
+      pkg:        "sbus_interface"
+      exec:       "betaflight_sbus_node"
+      param:
+      - { name:   "sbus_port", value:  "$(var comm_port)" }
+
+  - group:
+    - node:
+        if:         "$(var use_mavros)"
+        pkg:        "apm_handler"
+        exec:       "apm_handler_node"
+        param:
+        - { name:   "thrust_scaler",    value:  "$(var thrust_scaler)" }
+
+    - node:
+        namespace:  "mavros"                      # add another sub-namespace under the top
+        if:         "$(var use_mavros)"
+        pkg:        "mavros"
+        exec:       "mavros_node"
+        param:
+        - from:     "$(find-pkg-share freyja_configfiles)/launch/mavros_config_freyja.yaml"
+        - { name:   "fcu_url",            value: "$(var comm_port)" }
